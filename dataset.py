@@ -7,7 +7,7 @@ from torch.utils.data import Dataset, DataLoader
 import pickle
 import os
 import librosa
-from feature_extraction import LFCC
+from audio_feature_extraction import LFCC
 from torch.utils.data.dataloader import default_collate
 
 lfcc = LFCC(320, 160, 512, 16000, 20, with_energy=False)

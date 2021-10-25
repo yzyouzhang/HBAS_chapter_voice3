@@ -15,6 +15,7 @@ from tqdm import tqdm, trange
 import random
 from test import *
 import eval_metrics as em
+import yaml
 
 torch.set_default_tensor_type(torch.FloatTensor)
 
@@ -144,10 +145,13 @@ def train(args):
     # initialize model
     if args.model == 'resnet':
         node_dict = {"CQCC": 4, "LFCC": 3, "LFBB": 3, "Melspec": 6, "LFB": 6, "CQT": 8, "STFT": 11, "MFCC": 87}
-        feat = ResNet(node_dict[args.feat], args.enc_dim, resnet_type='18', nclasses=2).to(args.device)
+        feat_model = ResNet(node_dict[args.feat], args.enc_dim, resnet_type='18', nclasses=2).to(args.device)
     elif args.model == 'lcnn':
         feat_model = LCNN(4, args.enc_dim, nclasses=2).to(args.device)
-
+    elif args.model == 'rawnet':
+        with open("./model_config_RawNet.yml", 'r') as f_yaml:
+            parser1 = yaml.load(f_yaml)
+            feat_model = RawNet(parser1["model"], args).to(args.device)
     if args.continue_training:
         feat_model = torch.load(os.path.join(args.out_fold, 'anti-spoofing_feat_model.pt')).to(args.device)
     # feat_model = nn.DataParallel(feat_model, list(range(torch.cuda.device_count())))  # for multiple GPUs

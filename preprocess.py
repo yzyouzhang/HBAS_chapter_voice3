@@ -1,5 +1,5 @@
 import raw_dataset as dataset
-from feature_extraction import LFCC
+from audio_feature_extraction import LFCC
 import os
 import torch
 from tqdm import tqdm
