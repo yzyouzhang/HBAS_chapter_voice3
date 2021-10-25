@@ -36,7 +36,7 @@ def initParams():
     # Dataset prepare
     parser.add_argument("--feat", type=str, help="which feature to use", default='LFCC',
                         choices=["CQCC", "LFCC", "MFCC", "STFT", "Melspec", "CQT", "LFB", "LFBB"])
-    parser.add_argument("--feat_len", type=int, help="features length", default=750)
+    parser.add_argument("--feat_len", type=int, help="features length", default=500)
     parser.add_argument('--padding', type=str, default='repeat', choices=['zero', 'repeat', 'silence'],
                         help="how to pad short utterance")
     parser.add_argument("--enc_dim", type=int, help="encoding dimension", default=256)
