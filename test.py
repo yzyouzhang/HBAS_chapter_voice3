@@ -9,43 +9,16 @@ from torch.utils.data import DataLoader
 import torch.nn.functional as F
 import eval_metrics as em
 from evaluate_tDCF_asvspoof19 import compute_eer_and_tdcf
-import time
-from distutils import util
+from utils import setup_seed
 import argparse
 
 ## Adapted from https://github.com/pytorch/audio/tree/master/torchaudio
 ## https://github.com/nii-yamagishilab/project-NN-Pytorch-scripts/blob/newfunctions/
 
-def str2bool(v):
-    return bool(util.strtobool(v))
-
-def setup_seed(random_seed, cudnn_deterministic=True):
-    """ set_random_seed(random_seed, cudnn_deterministic=True)
-
-    Set the random_seed for numpy, python, and cudnn
-
-    input
-    -----
-      random_seed: integer random seed
-      cudnn_deterministic: for torch.backends.cudnn.deterministic
-
-    Note: this default configuration may result in RuntimeError
-    see https://pytorch.org/docs/stable/notes/randomness.html
-    """
-
-    # # initialization
-    # torch.manual_seed(random_seed)
-    random.seed(random_seed)
-    np.random.seed(random_seed)
-    os.environ['PYTHONHASHSEED'] = str(random_seed)
-
-    if torch.cuda.is_available():
-        torch.cuda.manual_seed_all(random_seed)
-        torch.backends.cudnn.deterministic = cudnn_deterministic
-        torch.backends.cudnn.benchmark = False
 
 def init():
     parser = argparse.ArgumentParser("load model scores")
+    parser.add_argument('--seed', type=int, help="random number seed", default=1000)
     parser.add_argument('-m', '--model_dir', type=str, help="directory for pretrained model", required=True,
                         default='/data3/neil/chan/adv1010')
     parser.add_argument("-t", "--task", type=str, help="which dataset you would like to test on",
@@ -53,10 +26,13 @@ def init():
                         choices=["ASVspoof2019LA", "ASVspoof2015", "VCC2020", "ASVspoof2019LASim"])
     parser.add_argument('-l', '--loss', help='loss for scoring', default="ocsoftmax",
                         required=False, choices=[None, "ocsoftmax", "amsoftmax", "p2sgrad"])
+    parser.add_argument("--feat_len", type=int, help="features length", default=500)
+    parser.add_argument('--batch_size', type=int, default=64, help="Mini batch size for training")
     parser.add_argument("--gpu", type=str, help="GPU index", default="0")
     args = parser.parse_args()
 
     os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu
+    setup_seed(args.seed)      # Set seeds
     args.cuda = torch.cuda.is_available()
     args.device = torch.device("cuda" if args.cuda else "cpu")
 
@@ -73,8 +49,8 @@ def test_model(feat_model_path, loss_model_path, part, add_loss):
     model = torch.load(feat_model_path)
     loss_model = torch.load(loss_model_path) if add_loss is not None else None
     test_set = ASVspoof2019("LA", "/data2/neil/ASVspoof2019LA/", part,
-                            "LFCC", feat_len=750, padding="repeat")
-    testDataLoader = DataLoader(test_set, batch_size=16, shuffle=False, num_workers=0)
+                            "LFCC", feat_len=args.feat_len, padding="repeat")
+    testDataLoader = DataLoader(test_set, batch_size=args.batch_size, shuffle=False, num_workers=0)
     model.eval()
     score_loader, idx_loader = [], []
 
@@ -125,8 +101,8 @@ def test_on_VCC(feat_model_path, loss_model_path, part, add_loss):
     model = torch.load(feat_model_path)
     # model = torch.nn.DataParallel(model, list(range(torch.cuda.device_count())))  # for multiple GPUs
     loss_model = torch.load(loss_model_path) if add_loss is not None else None
-    test_set_VCC = VCC2020("/data2/neil/VCC2020/", "LFCC", feat_len=750, padding="repeat")
-    testDataLoader = DataLoader(test_set_VCC, batch_size=4, shuffle=False, num_workers=0)
+    test_set_VCC = VCC2020("/data2/neil/VCC2020/", "LFCC", feat_len=args.feat_len, padding="repeat")
+    testDataLoader = DataLoader(test_set_VCC, batch_size=args.batch_size, shuffle=False, num_workers=0)
     model.eval()
     score_loader, idx_loader = [], []
 
@@ -176,9 +152,9 @@ def test_on_ASVspoof2015(feat_model_path, loss_model_path, part, add_loss):
     model = torch.load(feat_model_path)
     # model = torch.nn.DataParallel(model, list(range(torch.cuda.device_count())))  # for multiple GPUs
     loss_model = torch.load(loss_model_path) if add_loss is not None else None
-    test_set_2015 = ASVspoof2015("/data2/neil/ASVspoof2015/", part="eval", feature="LFCC", feat_len=750, padding="repeat")
+    test_set_2015 = ASVspoof2015("/data2/neil/ASVspoof2015/", part="eval", feature="LFCC", feat_len=args.feat_len, padding="repeat")
     print(len(test_set_2015))
-    testDataLoader = DataLoader(test_set_2015, batch_size=4, shuffle=False, num_workers=0)
+    testDataLoader = DataLoader(test_set_2015, batch_size=args.batch_size, shuffle=False, num_workers=0)
     model.eval()
     score_loader, idx_loader = [], []
 
@@ -256,9 +232,9 @@ def test_on_ASVspoof2019LASim(feat_model_path, loss_model_path, part, add_loss):
     test_set = ASVspoof2019LA_DeviceAdversarial(path_to_features="/data2/neil/ASVspoof2019LA/",
                                                 path_to_deviced="/dataNVME/neil/ASVspoof2019LADevice",
                                                 part="eval",
-                                                feature="LFCC", feat_len=750,
+                                                feature="LFCC", feat_len=args.feat_len,
                                                 padding="repeat")
-    testDataLoader = DataLoader(test_set, batch_size=16, shuffle=False, num_workers=0)
+    testDataLoader = DataLoader(test_set, batch_size=args.batch_size, shuffle=False, num_workers=0)
     model.eval()
     score_loader, idx_loader = [], []
 
@@ -305,7 +281,7 @@ if __name__ == "__main__":
 
     args = init()
 
-    model_path = os.path.join(args.model_dir, "anti-spoofing_cqcc_model.pt")
+    model_path = os.path.join(args.model_dir, "anti-spoofing_feat_model.pt")
     loss_model_path = os.path.join(args.model_dir, "anti-spoofing_loss_model.pt")
 
     if args.task == "ASVspoof2019LA":

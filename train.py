@@ -12,8 +12,7 @@ from evaluate_tDCF_asvspoof19 import compute_eer_and_tdcf
 from loss import *
 from collections import defaultdict
 from tqdm import tqdm, trange
-import random
-from test import *
+from utils import str2bool, setup_seed
 import eval_metrics as em
 import yaml
 
@@ -22,7 +21,7 @@ torch.set_default_tensor_type(torch.FloatTensor)
 def initParams():
     parser = argparse.ArgumentParser(description=__doc__)
 
-    parser.add_argument('--seed', type=int, help="random number seed", default=688)
+    parser.add_argument('--seed', type=int, help="random number seed", default=1000)
 
     # Data folder prepare
     parser.add_argument("-a", "--access_type", type=str, help="LA or PA", default='LA')
@@ -35,7 +34,7 @@ def initParams():
 
     # Dataset prepare
     parser.add_argument("--feat", type=str, help="which feature to use", default='LFCC',
-                        choices=["CQCC", "LFCC", "MFCC", "STFT", "Melspec", "CQT", "LFB", "LFBB"])
+                        choices=["CQCC", "LFCC"])
     parser.add_argument("--feat_len", type=int, help="features length", default=500)
     parser.add_argument('--padding', type=str, default='repeat', choices=['zero', 'repeat', 'silence'],
                         help="how to pad short utterance")
