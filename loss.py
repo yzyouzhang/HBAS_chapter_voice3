@@ -5,9 +5,9 @@ import torch.nn.functional as F
 from torch.autograd import Variable
 
 
-class AngularIsoLoss(nn.Module):
-    def __init__(self, feat_dim=2, r_real=0.9, r_fake=0.5, alpha=20.0):
-        super(AngularIsoLoss, self).__init__()
+class OCSoftmax(nn.Module):
+    def __init__(self, feat_dim=2, m_real=0.5, m_fake=0.2, alpha=20.0):
+        super(OCSoftmax, self).__init__()
         self.feat_dim = feat_dim
         self.r_real = r_real
         self.r_fake = r_fake
@@ -40,35 +40,6 @@ class AngularIsoLoss(nn.Module):
 
         return loss, -output_scores.squeeze(1)
 
-class OCSoftmax(nn.Module):
-    def __init__(self, feat_dim=2, r_real=0.9, r_fake=0.5, alpha=20.0):
-        super(OCSoftmax, self).__init__()
-        self.feat_dim = feat_dim
-        self.r_real = r_real
-        self.r_fake = r_fake
-        self.alpha = alpha
-        self.center = nn.Parameter(torch.randn(1, self.feat_dim))
-        nn.init.kaiming_uniform_(self.center, 0.25)
-        self.softplus = nn.Softplus()
-
-    def forward(self, x, labels):
-        """
-        Args:
-            x: feature matrix with shape (batch_size, feat_dim).
-            labels: ground truth labels with shape (batch_size).
-        """
-        w = F.normalize(self.center, p=2, dim=1)
-        x = F.normalize(x, p=2, dim=1)
-
-        scores = x @ w.transpose(0,1)
-        output_scores = scores.clone()
-
-        scores[labels == 0] = self.r_real - scores[labels == 0]
-        scores[labels == 1] = scores[labels == 1] - self.r_fake
-
-        loss = self.softplus(self.alpha * scores).mean()
-
-        return loss, -output_scores.squeeze(1)
 
 class AMSoftmax(nn.Module):
     def __init__(self, num_classes, enc_dim, s=20, m=0.9):
@@ -96,6 +67,36 @@ class AMSoftmax(nn.Module):
 
         return logits, margin_logits
 
+
+class IsolateLoss(nn.Module):
+    """Isolate loss.
+
+        Reference:
+        I. Masi, A. Killekar, R. M. Mascarenhas, S. P. Gurudatt, and W. AbdAlmageed, “Two-branch Recurrent Network for Isolating Deepfakes in Videos,” 2020, [Online]. Available: http://arxiv.org/abs/2008.03412.
+        Args:
+            num_classes (int): number of classes.
+            feat_dim (int): feature dimension.
+        """
+    def __init__(self, num_classes=2, feat_dim=256, r_real=25, r_fake=75):
+        super(IsolateLoss, self).__init__()
+        self.num_classes = num_classes
+        self.feat_dim = feat_dim
+        self.r_real = r_real
+        self.r_fake = r_fake
+
+        self.center = nn.Parameter(torch.randn(1, self.feat_dim))
+
+    def forward(self, x, labels):
+        """
+        Args:
+            x: feature matrix with shape (batch_size, feat_dim).
+            labels: ground truth labels with shape (batch_size).
+        """
+        loss = F.relu(torch.norm(x[labels==0]-self.center, p=2, dim=1) - self.r_real).mean() \
+               + F.relu(self.r_fake - torch.norm(x[labels==1]-self.center, p=2, dim=1)).mean()
+        return loss, torch.norm(x-self.center, p=2, dim=1)
+
+
 if __name__ == "__main__":
     # feats = torch.randn((32, 90)).cuda()
     # centers = torch.randn((3,90)).cuda()
@@ -121,6 +122,6 @@ if __name__ == "__main__":
     feats = torch.randn((32, feat_dim))
     labels = torch.cat((torch.Tensor([0]).repeat(10),
                         torch.Tensor([1]).repeat(22)), 0).cuda()
-    aisoloss = AngularIsoLoss(feat_dim=feat_dim)
+    aisoloss = OCSoftmax(feat_dim=feat_dim)
     loss = aisoloss(feats, labels)
     print(loss)

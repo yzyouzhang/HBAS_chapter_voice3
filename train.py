@@ -46,9 +46,9 @@ def initParams():
     # Training hyperparameters
     parser.add_argument('--num_epochs', type=int, default=100, help="Number of epochs for training")
     parser.add_argument('--batch_size', type=int, default=128, help="Mini batch size for training")
-    parser.add_argument('--lr', type=float, default=0.0005, help="learning rate")
+    parser.add_argument('--lr', type=float, default=0.0003, help="learning rate")
     parser.add_argument('--lr_decay', type=float, default=0.8, help="decay learning rate")
-    parser.add_argument('--interval', type=int, default=30, help="interval to decay lr")
+    parser.add_argument('--interval', type=int, default=25, help="interval to decay lr")
 
     parser.add_argument('--beta_1', type=float, default=0.9, help="bata_1 for Adam")
     parser.add_argument('--beta_2', type=float, default=0.999, help="beta_2 for Adam")
@@ -59,8 +59,10 @@ def initParams():
     parser.add_argument('--loss', type=str, default="ocsoftmax",
                         choices=["softmax", "amsoftmax", "ocsoftmax", "isolate", "scl"], help="add other loss for one-class training")
     parser.add_argument('--weight_loss', type=float, default=1, help="weight for other loss")
-    parser.add_argument('--r_real', type=float, default=0.5, help="r_real for isolate loss")
-    parser.add_argument('--r_fake', type=float, default=0.1, help="r_fake for isolate loss")
+    parser.add_argument('--m_real', type=float, default=0.5, help="m_real for ocsoftmax loss")
+    parser.add_argument('--m_fake', type=float, default=0.1, help="m_fake for ocsoftmax loss")
+    parser.add_argument('--r_real', type=float, default=25.0, help="r_real for isolate loss")
+    parser.add_argument('--r_fake', type=float, default=75.0, help="r_fake for isolate loss")
     parser.add_argument('--alpha', type=float, default=20, help="scale factor for angular isolate loss")
 
     parser.add_argument('--test_only', action='store_true', help="test the trained model in case the test crash sometimes or another test method")
@@ -193,9 +195,13 @@ def train(args):
     criterion = nn.CrossEntropyLoss()
 
     if args.loss == "ocsoftmax":
-        ocsoftmax = OCSoftmax(args.enc_dim, r_real=args.r_real, r_fake=args.r_fake, alpha=args.alpha).to(args.device)
+        ocsoftmax = OCSoftmax(args.enc_dim, m_real=args.m_real, m_fake=args.m_fake, alpha=args.alpha).to(args.device)
         ocsoftmax.train()
         ocsoftmax_optimizer = torch.optim.SGD(ocsoftmax.parameters(), lr=args.lr)
+    elif args.loss == "isolate":
+        iso_loss = IsolateLoss(2, args.enc_dim, r_real=args.r_real, r_fake=args.r_fake).to(args.device)
+        iso_loss.train()
+        iso_optimizer = torch.optim.SGD(iso_loss.parameters(), lr=args.lr)
 
     early_stop_cnt = 0
     prev_loss = 1e8
@@ -214,6 +220,9 @@ def train(args):
         adjust_learning_rate(args, args.lr, feat_optimizer, epoch_num)
         if args.loss == "ocsoftmax":
             adjust_learning_rate(args, args.lr, ocsoftmax_optimizer, epoch_num)
+        elif args.loss == "isolate":
+            adjust_learning_rate(args, args.lr, iso_optimizer, epoch_num)
+
         if args.MT_AUG or args.ADV_AUG:
             adjust_learning_rate(args, args.lr_d, classifier_optimizer, epoch_num)
         print('\nEpoch: %d ' % (epoch_num + 1))
@@ -237,10 +246,13 @@ def train(args):
             ## loss calculate
             if args.loss == "softmax":
                 feat_loss = criterion(feat_outputs, labels)
-                trainlossDict['base_loss'].append(feat_loss.item())
             elif args.loss == "ocsoftmax":
                 ocsoftmaxloss, _ = ocsoftmax(feats, labels)
                 feat_loss = ocsoftmaxloss
+            elif args.loss == "isolate":
+                isoloss, _ = iso_loss(feats, labels)
+                feat_loss = isoloss
+
 
             if epoch_num > 0 and (args.MT_AUG or args.ADV_AUG):
                 channel = channel.to(args.device)
@@ -254,16 +266,26 @@ def train(args):
 
             ## backward
             if args.loss == "softmax":
+                trainlossDict['base_loss'].append(feat_loss.item())
                 feat_optimizer.zero_grad()
                 feat_loss.backward()
                 feat_optimizer.step()
             elif args.loss == "ocsoftmax":
-                feat_optimizer.zero_grad()
                 ocsoftmax_optimizer.zero_grad()
                 trainlossDict[args.loss].append(ocsoftmaxloss.item())
+                feat_optimizer.zero_grad()
                 feat_loss.backward()
                 feat_optimizer.step()
                 ocsoftmax_optimizer.step()
+            elif args.loss == "isolate":
+                iso_optimizer.zero_grad()
+                trainlossDict[args.loss].append(isoloss.item())
+                feat_optimizer.zero_grad()
+                feat_loss.backward()
+                feat_optimizer.step()
+                iso_optimizer.step()
+
+
 
             # Train the classifier network
             if (args.MT_AUG or args.ADV_AUG):
@@ -322,6 +344,9 @@ def train(args):
                 elif args.loss == "ocsoftmax":
                     ocsoftmaxloss, score = ocsoftmax(feats, labels)
                     devlossDict[args.loss].append(ocsoftmaxloss.item())
+                elif args.loss == "isolate":
+                    isoloss, score = iso_loss(feats, labels)
+                    devlossDict[args.loss].append(isoloss.item())
 
                 if epoch_num > 0 and (args.MT_AUG or args.ADV_AUG):
                     channel = channel.to(args.device)
@@ -376,6 +401,9 @@ def train(args):
                         elif args.loss == "ocsoftmax":
                             ocsoftmaxloss, score = ocsoftmax(feats, labels)
                             testlossDict[args.loss].append(ocsoftmaxloss.item())
+                        elif args.loss == "isolate":
+                            isoloss, score = iso_loss(feats, labels)
+                            testlossDict[args.loss].append(isoloss.item())
 
                         ip1_loader.append(feats)
                         idx_loader.append((labels))
@@ -400,6 +428,8 @@ def train(args):
                                                 'anti-spoofing_feat_model_%d.pt' % (epoch_num + 1)))
             if args.loss == "ocsoftmax":
                 loss_model = ocsoftmax
+            elif args.loss == "isolate":
+                loss_model = iso_loss
             elif args.loss == "softmax":
                 loss_model = None
             else:
@@ -412,6 +442,8 @@ def train(args):
             torch.save(feat_model, os.path.join(args.out_fold, 'anti-spoofing_feat_model.pt'))
             if args.loss == "ocsoftmax":
                 loss_model = ocsoftmax
+            elif args.loss == "isolate":
+                loss_model = iso_loss
             elif args.loss == "softmax":
                 loss_model = None
             else:
