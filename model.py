@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.nn.init as init
 from torch.autograd import Function
+from torch import Tensor
 import os
 import random
 import numpy as np
@@ -350,7 +351,7 @@ class SincConv(nn.Module):
     def to_hz(mel):
         return 700 * (10 ** (mel / 2595) - 1)
 
-    def __init__(self, args, out_channels, kernel_size, in_channels=1, sample_rate=16000,
+    def __init__(self, device, out_channels, kernel_size, in_channels=1, sample_rate=16000,
                  stride=1, padding=0, dilation=1, bias=False, groups=1):
 
         super(SincConv, self).__init__()
@@ -359,7 +360,7 @@ class SincConv(nn.Module):
             msg = "SincConv only support one input channel (here, in_channels = {%i})" % (in_channels)
             raise ValueError(msg)
 
-        self.device = args.device
+        self.device = device
         self.out_channels = out_channels
         self.kernel_size = kernel_size
         self.sample_rate = sample_rate
@@ -507,9 +508,9 @@ class RawNet(nn.Module):
                           batch_first=True)
 
         self.fc1_gru = nn.Linear(in_features=d_args['gru_node'],
-                                 out_features=d_args['nb_fc_node'])
+                                 out_features=args.enc_dim)
 
-        self.fc2_gru = nn.Linear(in_features=d_args['nb_fc_node'],
+        self.fc2_gru = nn.Linear(in_features=args.enc_dim,
                                  out_features=d_args['nb_classes'], bias=True)
 
         self.sig = nn.Sigmoid()
@@ -517,9 +518,9 @@ class RawNet(nn.Module):
 
     def forward(self, x, y=None):
 
-        nb_samp = x.shape[0]
-        len_seq = x.shape[1]
-        x = x.view(nb_samp, 1, len_seq)
+        # nb_samp = x.shape[0]
+        # len_seq = x.shape[1]
+        # x = x.view(nb_samp, 1, len_seq)
 
         x = self.Sinc_conv(x)
         x = F.max_pool1d(torch.abs(x), 3)
@@ -568,11 +569,11 @@ class RawNet(nn.Module):
         self.gru.flatten_parameters()
         x, _ = self.gru(x)
         x = x[:, -1, :]
-        x = self.fc1_gru(x)
-        x = self.fc2_gru(x)
-        output = self.logsoftmax(x)
+        feat = self.fc1_gru(x)
+        output = self.fc2_gru(feat)
+        # output = self.logsoftmax(x)
 
-        return x, output
+        return feat, output
 
     def _make_attention_fc(self, in_features, l_out_features):
 

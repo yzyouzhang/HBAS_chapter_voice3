@@ -16,6 +16,7 @@ wavform = torch.Tensor(np.expand_dims([0]*3200, axis=0))
 lfcc_silence = lfcc(wavform)
 silence_pad_value = lfcc_silence[:,0,:].unsqueeze(0)
 
+
 class ASVspoof2019LA(Dataset):
     def __init__(self, path_to_audio='/data/neil/DS_10283_3336/', path_to_features='/data2/neil/ASVspoof2019LA/',
                  part='train', feature='LFCC', feat_len=750, padding='repeat', genuine_only=False):
@@ -45,7 +46,6 @@ class ASVspoof2019LA(Dataset):
                 self.all_files = res
                 assert len(self.all_files) == 7355
 
-
     def __len__(self):
         return len(self.all_files)
 
@@ -61,17 +61,17 @@ class ASVspoof2019LA(Dataset):
                 startp = np.random.randint(this_feat_len - self.feat_len)
                 featureTensor = featureTensor[:, startp:startp + self.feat_len, :]
             if this_feat_len < self.feat_len:
-                if self.padding == 'zero':
-                    featureTensor = padding_Tensor(featureTensor, self.feat_len)
-                elif self.padding == 'repeat':
-                    featureTensor = repeat_padding_Tensor(featureTensor, self.feat_len)
-                elif self.padding == 'silence':
-                    featureTensor = silence_padding_Tensor(featureTensor, self.feat_len)
-                else:
-                    raise ValueError('Padding should be zero or repeat!')
+                featureTensor = repeat_padding_Tensor(featureTensor, self.feat_len)
         else:
             file_path = os.path.join(self.path_to_audio, "LA/ASVspoof2019_LA_" + self.part, "flac", filename+".flac")
             featureTensor, sr = torchaudio.load(file_path)
+            this_feat_len = featureTensor.shape[1]
+            if this_feat_len > self.feat_len:
+                startp = np.random.randint(this_feat_len - self.feat_len)
+                featureTensor = featureTensor[:, startp:startp + self.feat_len]
+            if this_feat_len < self.feat_len:
+                featureTensor = repeat_padding_RawTensor(featureTensor, self.feat_len)
+
         tag = self.tag[all_info[4]]
         label = self.label[all_info[5]]
         return featureTensor, filename, tag, label, 2019
@@ -236,23 +236,15 @@ class ASVspoof2019LA_DeviceAdversarial(Dataset):
         return default_collate(samples)
 
 
-def padding_Tensor(spec, ref_len):
-    _, cur_len, width = spec.shape
-    assert ref_len > cur_len
-    padd_len = ref_len - cur_len
-    return torch.cat((spec, torch.zeros((1, padd_len, width), dtype=spec.dtype)), 1)
-
 def repeat_padding_Tensor(spec, ref_len):
     mul = int(np.ceil(ref_len / spec.shape[1]))
     spec = spec.repeat(1, mul, 1)[:, :ref_len, :]
     return spec
 
-def silence_padding_Tensor(spec, ref_len):
-    _, cur_len, width = spec.shape
-    assert ref_len > cur_len
-    padd_len = ref_len - cur_len
-    return torch.cat((silence_pad_value.repeat(1, padd_len, 1).to(spec.device), spec), 1)
-
+def repeat_padding_RawTensor(raw, ref_len):
+    mul = int(np.ceil(ref_len / raw.shape[1]))
+    raw = raw.repeat(1, mul)[:, :ref_len]
+    return raw
 
 if __name__ == "__main__":
     dataset = ASVspoof2019LA(feature="Raw")

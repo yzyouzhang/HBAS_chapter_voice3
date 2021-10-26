@@ -34,7 +34,7 @@ def initParams():
 
     # Dataset prepare
     parser.add_argument("--feat", type=str, help="which feature to use", default='LFCC',
-                        choices=["CQCC", "LFCC"])
+                        choices=["CQCC", "LFCC", "Raw"])
     parser.add_argument("--feat_len", type=int, help="features length", default=500)
     parser.add_argument('--padding', type=str, default='repeat', choices=['zero', 'repeat', 'silence'],
                         help="how to pad short utterance")
@@ -149,6 +149,7 @@ def train(args):
     elif args.model == 'lcnn':
         feat_model = LCNN(4, args.enc_dim, nclasses=2).to(args.device)
     elif args.model == 'rawnet':
+        assert args.feat == "Raw"
         with open("./model_config_RawNet.yml", 'r') as f_yaml:
             parser1 = yaml.safe_load(f_yaml)
             feat_model = RawNet(parser1["model"], args).to(args.device)
@@ -221,7 +222,10 @@ def train(args):
         for i, (feat, audio_fn, tags, labels, channel) in enumerate(tqdm(trainDataLoader)):
             if args.AUG or args.MT_AUG or args.ADV_AUG:
                 if i > int(len(training_set) / args.batch_size / (len(training_set.devices) + 1)): break
-            feat = feat.transpose(2,3).to(args.device)
+            if args.feat == "Raw":
+                feat = feat.to(args.device)
+            else:
+                feat = feat.transpose(2,3).to(args.device)
             tags = tags.to(args.device)
             labels = labels.to(args.device)
             feats, feat_outputs = feat_model(feat)
@@ -294,13 +298,14 @@ def train(args):
             for i, (feat, audio_fn, tags, labels, channel) in enumerate(tqdm(valDataLoader)):
                 if args.AUG or args.MT_AUG or args.ADV_AUG:
                     if i > int(len(validation_set) / args.batch_size / (len(validation_set.devices) + 1)): break
-                feat = feat.transpose(2,3).to(args.device)
+                if args.feat == "Raw":
+                    feat = feat.to(args.device)
+                else:
+                    feat = feat.transpose(2, 3).to(args.device)
 
                 tags = tags.to(args.device)
                 labels = labels.to(args.device)
-
                 feat, tags, labels = shuffle(feat, tags, labels)
-
                 feats, feat_outputs = feat_model(feat)
 
                 feat_loss = criterion(feat_outputs, labels)
@@ -350,11 +355,13 @@ def train(args):
                 with torch.no_grad():
                     ip1_loader, tag_loader, idx_loader, score_loader = [], [], [], []
                     for i, (feat, audio_fn, tags, labels, channel) in enumerate(tqdm(testDataLoader)):
-                        feat = feat.transpose(2,3).to(args.device)
+                        if args.feat == "Raw":
+                            feat = feat.to(args.device)
+                        else:
+                            feat = feat.transpose(2, 3).to(args.device)
                         tags = tags.to(args.device)
                         labels = labels.to(args.device)
                         feats, feat_outputs = feat_model(feat)
-                        feat_loss = criterion(feat_outputs, labels)
                         score = F.softmax(feat_outputs, dim=1)[:, 0]
 
                         ip1_loader.append(feats)
