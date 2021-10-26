@@ -42,14 +42,14 @@ def initParams():
     parser.add_argument("--enc_dim", type=int, help="encoding dimension", default=256)
 
     parser.add_argument('-m', '--model', help='Model arch', default='resnet',
-                        choices=['resnet', 'lcnn'])
+                        choices=['resnet', 'lcnn', 'rawnet'])
 
     # Training hyperparameters
-    parser.add_argument('--num_epochs', type=int, default=1000, help="Number of epochs for training")
-    parser.add_argument('--batch_size', type=int, default=64, help="Mini batch size for training")
+    parser.add_argument('--num_epochs', type=int, default=100, help="Number of epochs for training")
+    parser.add_argument('--batch_size', type=int, default=128, help="Mini batch size for training")
     parser.add_argument('--lr', type=float, default=0.0005, help="learning rate")
-    parser.add_argument('--lr_decay', type=float, default=0.5, help="decay learning rate")
-    parser.add_argument('--interval', type=int, default=100, help="interval to decay lr")
+    parser.add_argument('--lr_decay', type=float, default=0.8, help="decay learning rate")
+    parser.add_argument('--interval', type=int, default=30, help="interval to decay lr")
 
     parser.add_argument('--beta_1', type=float, default=0.9, help="bata_1 for Adam")
     parser.add_argument('--beta_2', type=float, default=0.999, help="beta_2 for Adam")
@@ -57,11 +57,11 @@ def initParams():
     parser.add_argument("--gpu", type=str, help="GPU index", default="1")
     parser.add_argument('--num_workers', type=int, default=0, help="number of workers")
 
-    parser.add_argument('--add_loss', type=str, default="ang_iso",
-                        choices=[None, 'center', 'lgm', 'lgcl', 'isolate', 'iso_sq', 'ang_iso', 'multi_isolate', 'multicenter_isolate'], help="add other loss for one-class training")
+    parser.add_argument('--loss', type=str, default="ocsoftmax",
+                        choices=["softmax", "amsoftmax", "ocsoftmax", "isolate", "scl"], help="add other loss for one-class training")
     parser.add_argument('--weight_loss', type=float, default=1, help="weight for other loss")
-    parser.add_argument('--r_real', type=float, default=0.9, help="r_real for isolate loss")
-    parser.add_argument('--r_fake', type=float, default=0.2, help="r_fake for isolate loss")
+    parser.add_argument('--r_real', type=float, default=0.5, help="r_real for isolate loss")
+    parser.add_argument('--r_fake', type=float, default=0.1, help="r_fake for isolate loss")
     parser.add_argument('--alpha', type=float, default=20, help="scale factor for angular isolate loss")
 
     parser.add_argument('--test_only', action='store_true', help="test the trained model in case the test crash sometimes or another test method")
@@ -79,6 +79,7 @@ def initParams():
     parser.add_argument('--pre_train', action='store_true', help="whether to pretrain the model")
     parser.add_argument('--test_on_eval', action='store_true',
                         help="whether to run EER on the evaluation set")
+    parser.add_argument('--test_interval', type=int, default=5, help="test on eval for every how many epochs")
 
     args = parser.parse_args()
 
@@ -144,13 +145,12 @@ def train(args):
 
     # initialize model
     if args.model == 'resnet':
-        node_dict = {"CQCC": 4, "LFCC": 3, "LFBB": 3, "Melspec": 6, "LFB": 6, "CQT": 8, "STFT": 11, "MFCC": 87}
-        feat_model = ResNet(node_dict[args.feat], args.enc_dim, resnet_type='18', nclasses=2).to(args.device)
+        feat_model = ResNet(3, args.enc_dim, resnet_type='18', nclasses=2).to(args.device)
     elif args.model == 'lcnn':
         feat_model = LCNN(4, args.enc_dim, nclasses=2).to(args.device)
     elif args.model == 'rawnet':
         with open("./model_config_RawNet.yml", 'r') as f_yaml:
-            parser1 = yaml.load(f_yaml)
+            parser1 = yaml.safe_load(f_yaml)
             feat_model = RawNet(parser1["model"], args).to(args.device)
     if args.continue_training:
         feat_model = torch.load(os.path.join(args.out_fold, 'anti-spoofing_feat_model.pt')).to(args.device)
@@ -192,18 +192,18 @@ def train(args):
 
     criterion = nn.CrossEntropyLoss()
 
-    if args.add_loss == "ang_iso":
-        ang_iso = AngularIsoLoss(args.enc_dim, r_real=args.r_real, r_fake=args.r_fake, alpha=args.alpha).to(args.device)
-        ang_iso.train()
-        ang_iso_optimzer = torch.optim.SGD(ang_iso.parameters(), lr=args.lr)
+    if args.loss == "ocsoftmax":
+        ocsoftmax = OCSoftmax(args.enc_dim, r_real=args.r_real, r_fake=args.r_fake, alpha=args.alpha).to(args.device)
+        ocsoftmax.train()
+        ocsoftmax_optimizer = torch.optim.SGD(ocsoftmax.parameters(), lr=args.lr)
 
     early_stop_cnt = 0
     prev_loss = 1e8
 
-    if args.add_loss is None:
+    if args.loss =="softmax":
         monitor_loss = 'base_loss'
     else:
-        monitor_loss = args.add_loss
+        monitor_loss = args.loss
 
     for epoch_num in tqdm(range(args.num_epochs)):
         genuine_feats, ip1_loader, tag_loader, idx_loader = [], [], [], []
@@ -212,8 +212,8 @@ def train(args):
         devlossDict = defaultdict(list)
         testlossDict = defaultdict(list)
         adjust_learning_rate(args, args.lr, feat_optimizer, epoch_num)
-        if args.add_loss == "ang_iso":
-            adjust_learning_rate(args, args.lr, ang_iso_optimzer, epoch_num)
+        if args.loss == "ocsoftmax":
+            adjust_learning_rate(args, args.lr, ocsoftmax_optimizer, epoch_num)
         if args.MT_AUG or args.ADV_AUG:
             adjust_learning_rate(args, args.lr_d, classifier_optimizer, epoch_num)
         print('\nEpoch: %d ' % (epoch_num + 1))
@@ -229,14 +229,14 @@ def train(args):
             feat_loss = criterion(feat_outputs, labels)
             trainlossDict['base_loss'].append(feat_loss.item())
 
-            if args.add_loss == None:
+            if args.loss == "softmax":
                 feat_optimizer.zero_grad()
                 feat_loss.backward()
                 feat_optimizer.step()
 
-            if args.add_loss == "ang_iso":
-                ang_isoloss, _ = ang_iso(feats, labels)
-                feat_loss = ang_isoloss * args.weight_loss
+            if args.loss == "ocsoftmax":
+                ocsoftmaxloss, _ = ocsoftmax(feats, labels)
+                feat_loss = ocsoftmaxloss * args.weight_loss
                 if epoch_num > 0 and (args.MT_AUG or args.ADV_AUG):
                     channel = channel.to(args.device)
                     classifier_out = classifier(feats)
@@ -247,11 +247,11 @@ def train(args):
                     feat_loss += device_loss
                     trainlossDict["adv_loss"].append(device_loss.item())
                 feat_optimizer.zero_grad()
-                ang_iso_optimzer.zero_grad()
-                trainlossDict[args.add_loss].append(ang_isoloss.item())
+                ocsoftmax_optimizer.zero_grad()
+                trainlossDict[args.loss].append(ocsoftmaxloss.item())
                 feat_loss.backward()
                 feat_optimizer.step()
-                ang_iso_optimzer.step()
+                ocsoftmax_optimizer.step()
 
             if (args.MT_AUG or args.ADV_AUG):
                 channel = channel.to(args.device)
@@ -311,9 +311,9 @@ def train(args):
                 idx_loader.append((labels))
                 tag_loader.append((tags))
 
-                if args.add_loss == "ang_iso":
-                    ang_isoloss, score = ang_iso(feats, labels)
-                    devlossDict[args.add_loss].append(ang_isoloss.item())
+                if args.loss == "ocsoftmax":
+                    ocsoftmaxloss, score = ocsoftmax(feats, labels)
+                    devlossDict[args.loss].append(ocsoftmaxloss.item())
                     if epoch_num > 0 and (args.MT_AUG or args.ADV_AUG):
                         channel = channel.to(args.device)
                         classifier_out = classifier(feats)
@@ -347,44 +347,43 @@ def train(args):
 
 
         if args.test_on_eval:
-            with torch.no_grad():
-                ip1_loader, tag_loader, idx_loader, score_loader = [], [], [], []
-                for i, (feat, audio_fn, tags, labels, channel) in enumerate(tqdm(testDataLoader)):
-                    feat = feat.transpose(2,3).to(args.device)
-                    tags = tags.to(args.device)
-                    labels = labels.to(args.device)
-                    feats, feat_outputs = feat_model(feat)
-                    feat_loss = criterion(feat_outputs, labels)
-                    score = F.softmax(feat_outputs, dim=1)[:, 0]
+            if (epoch_num + 1) % args.test_interval == 0:
+                with torch.no_grad():
+                    ip1_loader, tag_loader, idx_loader, score_loader = [], [], [], []
+                    for i, (feat, audio_fn, tags, labels, channel) in enumerate(tqdm(testDataLoader)):
+                        feat = feat.transpose(2,3).to(args.device)
+                        tags = tags.to(args.device)
+                        labels = labels.to(args.device)
+                        feats, feat_outputs = feat_model(feat)
+                        feat_loss = criterion(feat_outputs, labels)
+                        score = F.softmax(feat_outputs, dim=1)[:, 0]
 
-                    ip1_loader.append(feats)
-                    idx_loader.append((labels))
-                    tag_loader.append((tags))
+                        ip1_loader.append(feats)
+                        idx_loader.append((labels))
+                        tag_loader.append((tags))
 
-                    if args.add_loss == "ang_iso":
-                        ang_isoloss, score = ang_iso(feats, labels)
-                        testlossDict[args.add_loss].append(ang_isoloss.item())
-                    score_loader.append(score)
+                        if args.loss == "ocsoftmax":
+                            ocsoftmaxloss, score = ocsoftmax(feats, labels)
+                            testlossDict[args.loss].append(ocsoftmaxloss.item())
+                        score_loader.append(score)
 
-                scores = torch.cat(score_loader, 0).data.cpu().numpy()
-                labels = torch.cat(idx_loader, 0).data.cpu().numpy()
-                eer = em.compute_eer(scores[labels == 0], scores[labels == 1])[0]
-                other_eer = em.compute_eer(-scores[labels == 0], -scores[labels == 1])[0]
-                eer = min(eer, other_eer)
+                    scores = torch.cat(score_loader, 0).data.cpu().numpy()
+                    labels = torch.cat(idx_loader, 0).data.cpu().numpy()
+                    eer = em.compute_eer(scores[labels == 0], scores[labels == 1])[0]
+                    other_eer = em.compute_eer(-scores[labels == 0], -scores[labels == 1])[0]
+                    eer = min(eer, other_eer)
 
-                with open(os.path.join(args.out_fold, "test_loss.log"), "a") as log:
-                    log.write(str(epoch_num) + "\t" + str(np.nanmean(testlossDict[monitor_loss])) + "\t" + str(eer) + "\n")
-                print("Test EER: {}".format(eer))
+                    with open(os.path.join(args.out_fold, "test_loss.log"), "a") as log:
+                        log.write(str(epoch_num) + "\t" + str(np.nanmean(testlossDict[monitor_loss])) + "\t" + str(eer) + "\n")
+                    print("Test EER: {}".format(eer))
 
 
         valLoss = np.nanmean(devlossDict[monitor_loss])
-        # if args.add_loss == "isolate":
-        #     print("isolate center: ", iso_loss.center.data)
         if (epoch_num + 1) % 1 == 0:
             torch.save(feat_model, os.path.join(args.out_fold, 'checkpoint',
                                                 'anti-spoofing_feat_model_%d.pt' % (epoch_num + 1)))
-            if args.add_loss == "ang_iso":
-                loss_model = ang_iso
+            if args.loss == "ocsoftmax":
+                loss_model = ocsoftmax
                 torch.save(loss_model, os.path.join(args.out_fold, 'checkpoint',
                                                     'anti-spoofing_loss_model_%d.pt' % (epoch_num + 1)))
             else:
@@ -393,8 +392,8 @@ def train(args):
         if valLoss < prev_loss:
             # Save the model checkpoint
             torch.save(feat_model, os.path.join(args.out_fold, 'anti-spoofing_feat_model.pt'))
-            if args.add_loss == "ang_iso":
-                loss_model = ang_iso
+            if args.loss == "ocsoftmax":
+                loss_model = ocsoftmax
                 torch.save(loss_model, os.path.join(args.out_fold, 'anti-spoofing_loss_model.pt'))
             else:
                 loss_model = None
@@ -421,10 +420,7 @@ if __name__ == "__main__":
     if not args.test_only:
         _, _ = train(args)
     # model = torch.load(os.path.join(args.out_fold, 'anti-spoofing_feat_model.pt'))
-    # if args.add_loss is None:
-    #     loss_model = None
-    # else:
-    #     loss_model = torch.load(os.path.join(args.out_fold, 'anti-spoofing_loss_model.pt'))
+    # loss_model = torch.load(os.path.join(args.out_fold, 'anti-spoofing_loss_model.pt'))
     # # TReer_cm, TRmin_tDCF = test(args, model, loss_model, "train")
     # # VAeer_cm, VAmin_tDCF = test(args, model, loss_model, "dev")
     # TEeer_cm, TEmin_tDCF = test(args, model, loss_model)
