@@ -6,7 +6,7 @@ import json
 import shutil
 import numpy as np
 from model import *
-from dataset import ASVspoof2019
+from dataset import *
 from torch.utils.data import DataLoader
 from evaluate_tDCF_asvspoof19 import compute_eer_and_tdcf
 from loss import *
@@ -24,8 +24,8 @@ def initParams():
     parser.add_argument('--seed', type=int, help="random number seed", default=1000)
 
     # Data folder prepare
-    parser.add_argument("-a", "--access_type", type=str, help="LA or PA", default='LA')
-    parser.add_argument("-d", "--path_to_database", type=str, help="dataset path", default='/data/neil/DS_10283_3336/')
+    parser.add_argument("-d", "--path_to_database", type=str, help="dataset path",
+                        default='/data/neil/DS_10283_3336/')
     parser.add_argument("-f", "--path_to_features", type=str, help="features path",
                         default='/data2/neil/ASVspoof2019LA/')
     parser.add_argument("-p", "--path_to_protocol", type=str, help="protocol path",
@@ -79,6 +79,7 @@ def initParams():
     parser.add_argument('--test_on_eval', action='store_true',
                         help="whether to run EER on the evaluation set")
     parser.add_argument('--test_interval', type=int, default=5, help="test on eval for every how many epochs")
+    parser.add_argument('--save_interval', type=int, default=5, help="save checkpoint model for every how many epochs")
 
     args = parser.parse_args()
 
@@ -153,13 +154,12 @@ def train(args):
             feat_model = RawNet(parser1["model"], args).to(args.device)
     if args.continue_training:
         feat_model = torch.load(os.path.join(args.out_fold, 'anti-spoofing_feat_model.pt')).to(args.device)
-    # feat_model = nn.DataParallel(feat_model, list(range(torch.cuda.device_count())))  # for multiple GPUs
     feat_optimizer = torch.optim.Adam(feat_model.parameters(), lr=args.lr,
                                       betas=(args.beta_1, args.beta_2), eps=args.eps, weight_decay=0.0005)
 
-    training_set = ASVspoof2019(args.access_type, args.path_to_features, 'train',
+    training_set = ASVspoof2019LA(args.path_to_database, args.path_to_features, 'train',
                                 args.feat, feat_len=args.feat_len, padding=args.padding)
-    validation_set = ASVspoof2019(args.access_type, args.path_to_features, 'dev',
+    validation_set = ASVspoof2019LA(args.path_to_database, args.path_to_features, 'dev',
                                   args.feat, feat_len=args.feat_len, padding=args.padding)
     if args.AUG or args.MT_AUG or args.ADV_AUG:
         training_set = ASVspoof2019LA_DeviceAdversarial(path_to_features="/data2/neil/ASVspoof2019LA/",
@@ -182,7 +182,7 @@ def train(args):
     valDataLoader = DataLoader(validation_set, batch_size=args.batch_size,
                                shuffle=True, num_workers=args.num_workers, collate_fn=validation_set.collate_fn)
 
-    test_set = ASVspoof2019(args.access_type, args.path_to_features, "eval", args.feat,
+    test_set = ASVspoof2019LA(args.path_to_database, args.path_to_features, "eval", args.feat,
                             feat_len=args.feat_len, padding=args.padding)
     testDataLoader = DataLoader(test_set, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers, collate_fn=test_set.collate_fn)
 
@@ -378,7 +378,7 @@ def train(args):
 
 
         valLoss = np.nanmean(devlossDict[monitor_loss])
-        if (epoch_num + 1) % 1 == 0:
+        if (epoch_num + 1) % args.test_interval == 0:
             torch.save(feat_model, os.path.join(args.out_fold, 'checkpoint',
                                                 'anti-spoofing_feat_model_%d.pt' % (epoch_num + 1)))
             if args.loss == "ocsoftmax":
