@@ -518,10 +518,6 @@ class RawNet(nn.Module):
 
     def forward(self, x, y=None):
 
-        # nb_samp = x.shape[0]
-        # len_seq = x.shape[1]
-        # x = x.view(nb_samp, 1, len_seq)
-
         x = self.Sinc_conv(x)
         x = F.max_pool1d(torch.abs(x), 3)
         x = self.first_bn(x)

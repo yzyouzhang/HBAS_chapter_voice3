@@ -222,33 +222,42 @@ def train(args):
         for i, (feat, audio_fn, tags, labels, channel) in enumerate(tqdm(trainDataLoader)):
             if args.AUG or args.MT_AUG or args.ADV_AUG:
                 if i > int(len(training_set) / args.batch_size / (len(training_set.devices) + 1)): break
+            ## data prep
             if args.feat == "Raw":
                 feat = feat.to(args.device)
             else:
                 feat = feat.transpose(2,3).to(args.device)
             tags = tags.to(args.device)
             labels = labels.to(args.device)
-            feats, feat_outputs = feat_model(feat)
-            feat_loss = criterion(feat_outputs, labels)
-            trainlossDict['base_loss'].append(feat_loss.item())
 
+            # Train the embedding network
+            ## forward
+            feats, feat_outputs = feat_model(feat)
+
+            ## loss calculate
+            if args.loss == "softmax":
+                feat_loss = criterion(feat_outputs, labels)
+                trainlossDict['base_loss'].append(feat_loss.item())
+            elif args.loss == "ocsoftmax":
+                ocsoftmaxloss, _ = ocsoftmax(feats, labels)
+                feat_loss = ocsoftmaxloss
+
+            if epoch_num > 0 and (args.MT_AUG or args.ADV_AUG):
+                channel = channel.to(args.device)
+                classifier_out = classifier(feats)
+                _, predicted = torch.max(classifier_out.data, 1)
+                total_m += channel.size(0)
+                correct_m += (predicted == channel).sum().item()
+                device_loss = criterion(classifier_out, channel)
+                feat_loss += device_loss
+                trainlossDict["adv_loss"].append(device_loss.item())
+
+            ## backward
             if args.loss == "softmax":
                 feat_optimizer.zero_grad()
                 feat_loss.backward()
                 feat_optimizer.step()
-
-            if args.loss == "ocsoftmax":
-                ocsoftmaxloss, _ = ocsoftmax(feats, labels)
-                feat_loss = ocsoftmaxloss * args.weight_loss
-                if epoch_num > 0 and (args.MT_AUG or args.ADV_AUG):
-                    channel = channel.to(args.device)
-                    classifier_out = classifier(feats)
-                    _, predicted = torch.max(classifier_out.data, 1)
-                    total_m += channel.size(0)
-                    correct_m += (predicted == channel).sum().item()
-                    device_loss = criterion(classifier_out, channel)
-                    feat_loss += device_loss
-                    trainlossDict["adv_loss"].append(device_loss.item())
+            elif args.loss == "ocsoftmax":
                 feat_optimizer.zero_grad()
                 ocsoftmax_optimizer.zero_grad()
                 trainlossDict[args.loss].append(ocsoftmaxloss.item())
@@ -256,6 +265,7 @@ def train(args):
                 feat_optimizer.step()
                 ocsoftmax_optimizer.step()
 
+            # Train the classifier network
             if (args.MT_AUG or args.ADV_AUG):
                 channel = channel.to(args.device)
                 feats, _ = feat_model(feat)
@@ -269,6 +279,7 @@ def train(args):
                 device_loss_c.backward()
                 classifier_optimizer.step()
 
+            ## record
             ip1_loader.append(feats)
             idx_loader.append((labels))
             tag_loader.append((tags))
@@ -292,9 +303,6 @@ def train(args):
         feat_model.eval()
         with torch.no_grad():
             ip1_loader, tag_loader, idx_loader, score_loader = [], [], [], []
-            # with trange(2) as v:
-            # with trange(len(valDataLoader)) as v:
-            #     for i in v:
             for i, (feat, audio_fn, tags, labels, channel) in enumerate(tqdm(valDataLoader)):
                 if args.AUG or args.MT_AUG or args.ADV_AUG:
                     if i > int(len(validation_set) / args.batch_size / (len(validation_set.devices) + 1)): break
@@ -309,23 +317,24 @@ def train(args):
                 feats, feat_outputs = feat_model(feat)
 
                 feat_loss = criterion(feat_outputs, labels)
-                score = F.softmax(feat_outputs, dim=1)[:, 0]
+                if args.loss == "softmax":
+                    score = F.softmax(feat_outputs, dim=1)[:, 0]
+                elif args.loss == "ocsoftmax":
+                    ocsoftmaxloss, score = ocsoftmax(feats, labels)
+                    devlossDict[args.loss].append(ocsoftmaxloss.item())
+
+                if epoch_num > 0 and (args.MT_AUG or args.ADV_AUG):
+                    channel = channel.to(args.device)
+                    classifier_out = classifier(feats)
+                    _, predicted = torch.max(classifier_out.data, 1)
+                    total_v += channel.size(0)
+                    correct_v += (predicted == channel).sum().item()
+                    device_loss = criterion(classifier_out, channel)
+                    devlossDict["adv_loss"].append(device_loss.item())
 
                 ip1_loader.append(feats)
                 idx_loader.append((labels))
                 tag_loader.append((tags))
-
-                if args.loss == "ocsoftmax":
-                    ocsoftmaxloss, score = ocsoftmax(feats, labels)
-                    devlossDict[args.loss].append(ocsoftmaxloss.item())
-                    if epoch_num > 0 and (args.MT_AUG or args.ADV_AUG):
-                        channel = channel.to(args.device)
-                        classifier_out = classifier(feats)
-                        _, predicted = torch.max(classifier_out.data, 1)
-                        total_v += channel.size(0)
-                        correct_v += (predicted == channel).sum().item()
-                        device_loss = criterion(classifier_out, channel)
-                        devlossDict["adv_loss"].append(device_loss.item())
 
                 score_loader.append(score)
 
@@ -362,15 +371,16 @@ def train(args):
                         tags = tags.to(args.device)
                         labels = labels.to(args.device)
                         feats, feat_outputs = feat_model(feat)
-                        score = F.softmax(feat_outputs, dim=1)[:, 0]
+                        if args.loss == "softmax":
+                            score = F.softmax(feat_outputs, dim=1)[:, 0]
+                        elif args.loss == "ocsoftmax":
+                            ocsoftmaxloss, score = ocsoftmax(feats, labels)
+                            testlossDict[args.loss].append(ocsoftmaxloss.item())
 
                         ip1_loader.append(feats)
                         idx_loader.append((labels))
                         tag_loader.append((tags))
 
-                        if args.loss == "ocsoftmax":
-                            ocsoftmaxloss, score = ocsoftmax(feats, labels)
-                            testlossDict[args.loss].append(ocsoftmaxloss.item())
                         score_loader.append(score)
 
                     scores = torch.cat(score_loader, 0).data.cpu().numpy()
@@ -390,35 +400,35 @@ def train(args):
                                                 'anti-spoofing_feat_model_%d.pt' % (epoch_num + 1)))
             if args.loss == "ocsoftmax":
                 loss_model = ocsoftmax
-                torch.save(loss_model, os.path.join(args.out_fold, 'checkpoint',
-                                                    'anti-spoofing_loss_model_%d.pt' % (epoch_num + 1)))
-            else:
+            elif args.loss == "softmax":
                 loss_model = None
+            else:
+                print("What is your loss? You may encounter error.")
+            torch.save(loss_model, os.path.join(args.out_fold, 'checkpoint',
+                                                'anti-spoofing_loss_model_%d.pt' % (epoch_num + 1)))
 
         if valLoss < prev_loss:
             # Save the model checkpoint
             torch.save(feat_model, os.path.join(args.out_fold, 'anti-spoofing_feat_model.pt'))
             if args.loss == "ocsoftmax":
                 loss_model = ocsoftmax
-                torch.save(loss_model, os.path.join(args.out_fold, 'anti-spoofing_loss_model.pt'))
-            else:
+            elif args.loss == "softmax":
                 loss_model = None
+            else:
+                print("What is your loss? You may encounter error.")
+            torch.save(loss_model, os.path.join(args.out_fold, 'anti-spoofing_loss_model.pt'))
+
             prev_loss = valLoss
             early_stop_cnt = 0
         else:
             early_stop_cnt += 1
 
-        if early_stop_cnt == 500:
+        if early_stop_cnt == 20:
             with open(os.path.join(args.out_fold, 'args.json'), 'a') as res_file:
-                res_file.write('\nTrained Epochs: %d\n' % (epoch_num - 499))
+                res_file.write('\nTrained Epochs: %d\n' % (epoch_num - 19))
             break
-        # if early_stop_cnt == 1:
-        #     torch.save(feat_model, os.path.join(args.out_fold, 'anti-spoofing_feat_model.pt')
-
-            # print('Dev Accuracy of the model on the val features: {} % '.format(100 * feat_correct / total))
 
     return feat_model, loss_model
-
 
 
 if __name__ == "__main__":
