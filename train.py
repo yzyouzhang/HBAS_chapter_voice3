@@ -36,8 +36,6 @@ def initParams():
     parser.add_argument("--feat", type=str, help="which feature to use", default='LFCC',
                         choices=["CQCC", "LFCC", "Raw"])
     parser.add_argument("--feat_len", type=int, help="features length", default=500)
-    parser.add_argument('--padding', type=str, default='repeat', choices=['zero', 'repeat', 'silence'],
-                        help="how to pad short utterance")
     parser.add_argument("--enc_dim", type=int, help="encoding dimension", default=256)
 
     parser.add_argument('-m', '--model', help='Model arch', default='resnet',
@@ -56,7 +54,7 @@ def initParams():
     parser.add_argument("--gpu", type=str, help="GPU index", default="1")
     parser.add_argument('--num_workers', type=int, default=0, help="number of workers")
 
-    parser.add_argument('--loss', type=str, default="ocsoftmax",
+    parser.add_argument('-l', '--loss', type=str, default="ocsoftmax",
                         choices=["softmax", "amsoftmax", "ocsoftmax", "isolate", "scl"], help="add other loss for one-class training")
     parser.add_argument('--weight_loss', type=float, default=0.5, help="weight for other loss")
     parser.add_argument('--m_real', type=float, default=0.5, help="m_real for ocsoftmax loss")
@@ -162,20 +160,18 @@ def train(args):
                                       betas=(args.beta_1, args.beta_2), eps=args.eps, weight_decay=0.0005)
 
     training_set = ASVspoof2019LA(args.path_to_database, args.path_to_features, 'train',
-                                args.feat, feat_len=args.feat_len, padding=args.padding)
+                                args.feat, feat_len=args.feat_len)
     validation_set = ASVspoof2019LA(args.path_to_database, args.path_to_features, 'dev',
-                                  args.feat, feat_len=args.feat_len, padding=args.padding)
+                                  args.feat, feat_len=args.feat_len)
     if args.AUG or args.MT_AUG or args.ADV_AUG:
         training_set = ASVspoof2019LA_DeviceAdversarial(path_to_features="/data2/neil/ASVspoof2019LA/",
                                                         path_to_deviced="/dataNVME/neil/ASVspoof2019LADevice",
                                                         part="train",
-                                                        feature=args.feat, feat_len=args.feat_len,
-                                                        padding=args.padding)
+                                                        feature=args.feat, feat_len=args.feat_len)
         validation_set = ASVspoof2019LA_DeviceAdversarial(path_to_features="/data2/neil/ASVspoof2019LA/",
                                                           path_to_deviced="/dataNVME/neil/ASVspoof2019LADevice",
                                                           part="dev",
-                                                          feature=args.feat, feat_len=args.feat_len,
-                                                          padding=args.padding)
+                                                          feature=args.feat, feat_len=args.feat_len)
     if args.MT_AUG or args.ADV_AUG:
         classifier = ChannelClassifier(args.enc_dim, len(training_set.devices)+1, args.lambda_, ADV=args.ADV_AUG).to(args.device)
         classifier_optimizer = torch.optim.Adam(classifier.parameters(), lr=args.lr_d,
@@ -187,7 +183,7 @@ def train(args):
                                shuffle=True, num_workers=args.num_workers, collate_fn=validation_set.collate_fn)
 
     test_set = ASVspoof2019LA(args.path_to_database, args.path_to_features, "eval", args.feat,
-                            feat_len=args.feat_len, padding=args.padding)
+                            feat_len=args.feat_len)
     testDataLoader = DataLoader(test_set, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers, collate_fn=test_set.collate_fn)
 
     feat, _, _, _, _ = training_set[23]

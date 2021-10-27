@@ -19,6 +19,10 @@ import argparse
 def init():
     parser = argparse.ArgumentParser("load model scores")
     parser.add_argument('--seed', type=int, help="random number seed", default=1000)
+    parser.add_argument("-d", "--path_to_database", type=str, help="dataset path",
+                        default='/data/neil/DS_10283_3336/')
+    parser.add_argument("-f", "--path_to_features", type=str, help="features path",
+                        default='/data2/neil/ASVspoof2019LA/')
     parser.add_argument('-m', '--model_dir', type=str, help="directory for pretrained model", required=True,
                         default='/data3/neil/chan/adv1010')
     parser.add_argument("-t", "--task", type=str, help="which dataset you would like to test on",
@@ -26,6 +30,8 @@ def init():
                         choices=["ASVspoof2019LA", "ASVspoof2015", "VCC2020", "ASVspoof2019LASim"])
     parser.add_argument('-l', '--loss', help='loss for scoring', default="ocsoftmax",
                         required=False, choices=[None, "ocsoftmax", "amsoftmax", "p2sgrad"])
+    parser.add_argument("--feat", type=str, help="which feature to use", default='LFCC',
+                        choices=["CQCC", "LFCC", "Raw"])
     parser.add_argument("--feat_len", type=int, help="features length", default=500)
     parser.add_argument('--batch_size', type=int, default=64, help="Mini batch size for training")
     parser.add_argument("--gpu", type=str, help="GPU index", default="0")
@@ -48,23 +54,25 @@ def test_model(feat_model_path, loss_model_path, part, add_loss):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = torch.load(feat_model_path)
     loss_model = torch.load(loss_model_path) if add_loss is not None else None
-    test_set = ASVspoof2019("LA", "/data2/neil/ASVspoof2019LA/", part,
-                            "LFCC", feat_len=args.feat_len, padding="repeat")
+    test_set = ASVspoof2019LA(args.path_to_database, args.path_to_features, part,
+                            args.feat, feat_len=args.feat_len)
     testDataLoader = DataLoader(test_set, batch_size=args.batch_size, shuffle=False, num_workers=0)
     model.eval()
     score_loader, idx_loader = [], []
 
     with open(os.path.join(dir_path, 'checkpoint_cm_score.txt'), 'w') as cm_score_file:
-        for i, (lfcc, audio_fn, tags, labels, _) in enumerate(tqdm(testDataLoader)):
-            lfcc = lfcc.transpose(2,3).to(device)
-            # print(lfcc.shape)
+        for i, (feat, audio_fn, tags, labels, _) in enumerate(tqdm(testDataLoader)):
+            if args.feat == "Raw":
+                feat = feat.to(args.device)
+            else:
+                feat = feat.transpose(2, 3).to(args.device)
+            # print(feat.shape)
             tags = tags.to(device)
             labels = labels.to(device)
 
-            feats, lfcc_outputs = model(lfcc)
+            feats, feat_outputs = model(feat)
 
-            score = F.softmax(lfcc_outputs)[:, 0]
-            # print(score)
+            score = F.softmax(feat_outputs)[:, 0]
 
             if add_loss == "ocsoftmax":
                 ang_isoloss, score = loss_model(feats, labels)
@@ -107,15 +115,18 @@ def test_on_VCC(feat_model_path, loss_model_path, part, add_loss):
     score_loader, idx_loader = [], []
 
     with open(os.path.join(dir_path, 'checkpoint_cm_score_VCC.txt'), 'w') as cm_score_file:
-        for i, (lfcc, _, tags, labels, _) in enumerate(tqdm(testDataLoader)):
-            lfcc = lfcc.transpose(2,3).to(device)
+        for i, (feat, _, tags, labels, _) in enumerate(tqdm(testDataLoader)):
+            if args.feat == "Raw":
+                feat = feat.to(args.device)
+            else:
+                feat = feat.transpose(2, 3).to(args.device)
 
             tags = tags.to(device)
             labels = labels.to(device)
 
-            feats, lfcc_outputs = model(lfcc)
+            feats, feat_outputs = model(feat)
 
-            score = F.softmax(lfcc_outputs)[:, 0]
+            score = F.softmax(feat_outputs)[:, 0]
 
             if add_loss == "ocsoftmax":
                 ang_isoloss, score = loss_model(feats, labels)
@@ -159,14 +170,17 @@ def test_on_ASVspoof2015(feat_model_path, loss_model_path, part, add_loss):
     score_loader, idx_loader = [], []
 
     with open(os.path.join(dir_path, 'checkpoint_cm_score_VCC.txt'), 'w') as cm_score_file:
-        for i, (lfcc, audio_fn, tags, labels, _) in enumerate(tqdm(testDataLoader)):
-            lfcc = lfcc.transpose(2,3).to(device)
+        for i, (feat, audio_fn, tags, labels, _) in enumerate(tqdm(testDataLoader)):
+            if args.feat == "Raw":
+                feat = feat.to(args.device)
+            else:
+                feat = feat.transpose(2, 3).to(args.device)
             tags = tags.to(device)
             labels = labels.to(device)
 
-            feats, lfcc_outputs = model(lfcc)
+            feats, feat_outputs = model(feat)
 
-            score = F.softmax(lfcc_outputs)[:, 0]
+            score = F.softmax(feat_outputs)[:, 0]
             # print(score)
 
             if add_loss == "ocsoftmax":
@@ -239,15 +253,15 @@ def test_on_ASVspoof2019LASim(feat_model_path, loss_model_path, part, add_loss):
     score_loader, idx_loader = [], []
 
     with open(os.path.join(dir_path, 'checkpoint_cm_score.txt'), 'w') as cm_score_file:
-        for i, (lfcc, audio_fn, tags, labels, _) in enumerate(tqdm(testDataLoader)):
-            lfcc = lfcc.transpose(2,3).to(device)
-            # print(lfcc.shape)
+        for i, (feat, audio_fn, tags, labels, _) in enumerate(tqdm(testDataLoader)):
+            feat = feat.transpose(2,3).to(device)
+            # print(feat.shape)
             tags = tags.to(device)
             labels = labels.to(device)
 
-            feats, lfcc_outputs = model(lfcc)
+            feats, feat_outputs = model(feat)
 
-            score = F.softmax(lfcc_outputs)[:, 0]
+            score = F.softmax(feat_outputs)[:, 0]
             # print(score)
 
             if add_loss == "ocsoftmax":

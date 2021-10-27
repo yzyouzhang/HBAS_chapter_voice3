@@ -7,19 +7,13 @@ from torch.utils.data import Dataset, DataLoader
 import pickle
 import os
 import librosa
-from audio_feature_extraction import LFCC
 from torch.utils.data.dataloader import default_collate
 import torchaudio
-
-lfcc = LFCC(320, 160, 512, 16000, 20, with_energy=False)
-wavform = torch.Tensor(np.expand_dims([0]*3200, axis=0))
-lfcc_silence = lfcc(wavform)
-silence_pad_value = lfcc_silence[:,0,:].unsqueeze(0)
 
 
 class ASVspoof2019LA(Dataset):
     def __init__(self, path_to_audio='/data/neil/DS_10283_3336/', path_to_features='/data2/neil/ASVspoof2019LA/',
-                 part='train', feature='LFCC', feat_len=750, padding='repeat', genuine_only=False):
+                 part='train', feature='LFCC', feat_len=750, genuine_only=False):
         super(ASVspoof2019LA, self).__init__()
         self.path_to_audio = path_to_audio
         self.path_to_features = path_to_features
@@ -27,7 +21,6 @@ class ASVspoof2019LA(Dataset):
         self.ptf = os.path.join(path_to_features, self.part)
         self.feat_len = feat_len
         self.feature = feature
-        self.padding = padding
         self.genuine_only = genuine_only
         self.tag = {"-": 0, "A01": 1, "A02": 2, "A03": 3, "A04": 4, "A05": 5, "A06": 6, "A07": 7, "A08": 8, "A09": 9,
                       "A10": 10, "A11": 11, "A12": 12, "A13": 13, "A14": 14, "A15": 15, "A16": 16, "A17": 17, "A18": 18,
@@ -82,12 +75,11 @@ class ASVspoof2019LA(Dataset):
 
 class VCC2020(Dataset):
     def __init__(self, path_to_features="/data2/neil/VCC2020/", feature='LFCC',
-                 feat_len=750, padding='repeat', genuine_only=False):
+                 feat_len=750, genuine_only=False):
         super(VCC2020, self).__init__()
         self.ptf = path_to_features
         self.feat_len = feat_len
         self.feature = feature
-        self.padding = padding
         self.tag = {"-": 0, "SOU": 20, "T01": 21, "T02": 22, "T03": 23, "T04": 24, "T05": 25, "T06": 26, "T07": 27, "T08": 28, "T09": 29,
                     "T10": 30, "T11": 31, "T12": 32, "T13": 33, "T14": 34, "T15": 35, "T16": 36, "T17": 37, "T18": 38, "T19": 39,
                     "T20": 40, "T21": 41, "T22": 42, "T23": 43, "T24": 44, "T25": 45, "T26": 46, "T27": 47, "T28": 48, "T29": 49,
@@ -111,14 +103,7 @@ class VCC2020(Dataset):
             startp = np.random.randint(this_feat_len - self.feat_len)
             featureTensor = featureTensor[:, startp:startp + self.feat_len, :]
         if this_feat_len < self.feat_len:
-            if self.padding == 'zero':
-                featureTensor = padding_Tensor(featureTensor, self.feat_len)
-            elif self.padding == 'repeat':
-                featureTensor = repeat_padding_Tensor(featureTensor, self.feat_len)
-            elif self.padding == 'silence':
-                featureTensor = silence_padding_Tensor(featureTensor, self.feat_len)
-            else:
-                raise ValueError('Padding should be zero or repeat!')
+            featureTensor = repeat_padding_Tensor(featureTensor, self.feat_len)
         tag = self.tag[all_info[-2]]
         label = self.label[all_info[-1]]
         return featureTensor, basename, tag, label, 2020
@@ -129,14 +114,13 @@ class VCC2020(Dataset):
 
 class ASVspoof2015(Dataset):
     def __init__(self, path_to_features, part='train', feature='LFCC', feat_len=750,
-                 padding='repeat', genuine_only=False):
+                 genuine_only=False):
         super(ASVspoof2015, self).__init__()
         self.path_to_features = path_to_features
         self.part = part
         self.ptf = os.path.join(path_to_features, self.part)
         self.feat_len = feat_len
         self.feature = feature
-        self.padding = padding
         self.tag = {"human": 0, "S1": 1, "S2": 2, "S3": 3, "S4": 4, "S5": 5,
                     "S6": 6, "S7": 7, "S8": 8, "S9": 9, "S10": 10}
         self.label = {"spoof": 1, "human": 0}
@@ -156,14 +140,7 @@ class ASVspoof2015(Dataset):
             startp = np.random.randint(this_feat_len - self.feat_len)
             featureTensor = featureTensor[:, startp:startp + self.feat_len, :]
         if this_feat_len < self.feat_len:
-            if self.padding == 'zero':
-                featureTensor = padding_Tensor(featureTensor, self.feat_len)
-            elif self.padding == 'repeat':
-                featureTensor = repeat_padding_Tensor(featureTensor, self.feat_len)
-            elif self.padding == 'silence':
-                featureTensor = silence_padding_Tensor(featureTensor, self.feat_len)
-            else:
-                raise ValueError('Padding should be zero or repeat!')
+            featureTensor = repeat_padding_Tensor(featureTensor, self.feat_len)
         filename =  all_info[1]
         tag = self.tag[all_info[-2]]
         label = self.label[all_info[-1]]
@@ -175,7 +152,7 @@ class ASVspoof2015(Dataset):
 
 class ASVspoof2019LA_DeviceAdversarial(Dataset):
     def __init__(self, path_to_features="/data2/neil/ASVspoof2019LA/", path_to_deviced="/dataNVME/neil/ASVspoof2019LADevice",
-                 part="train", feature='LFCC', feat_len=750, padding='repeat'):
+                 part="train", feature='LFCC', feat_len=750):
         super(ASVspoof2019LA_DeviceAdversarial, self).__init__()
         self.path_to_features = path_to_features
         suffix = {"train" : "", "dev":"Dev", "eval": "Eval"}
@@ -184,7 +161,6 @@ class ASVspoof2019LA_DeviceAdversarial(Dataset):
         self.ptf = os.path.join(path_to_features, part)
         self.feat_len = feat_len
         self.feature = feature
-        self.padding = padding
         self.tag = {"-": 0, "A01": 1, "A02": 2, "A03": 3, "A04": 4, "A05": 5, "A06": 6, "A07": 7, "A08": 8, "A09": 9,
                     "A10": 10, "A11": 11, "A12": 12, "A13": 13, "A14": 14, "A15": 15, "A16": 16, "A17": 17, "A18": 18,
                     "A19": 19}
@@ -219,14 +195,7 @@ class ASVspoof2019LA_DeviceAdversarial(Dataset):
             startp = np.random.randint(this_feat_len - self.feat_len)
             featureTensor = featureTensor[:, startp:startp + self.feat_len, :]
         if this_feat_len < self.feat_len:
-            if self.padding == 'zero':
-                featureTensor = padding_Tensor(featureTensor, self.feat_len)
-            elif self.padding == 'repeat':
-                featureTensor = repeat_padding_Tensor(featureTensor, self.feat_len)
-            elif self.padding == 'silence':
-                featureTensor = silence_padding_Tensor(featureTensor, self.feat_len)
-            else:
-                raise ValueError('Padding should be zero or repeat!')
+            featureTensor = repeat_padding_Tensor(featureTensor, self.feat_len)
         filename = "_".join(all_info[1:4])
         tag = self.tag[all_info[4]]
         label = self.label[all_info[5]]
@@ -246,8 +215,3 @@ def repeat_padding_RawTensor(raw, ref_len):
     raw = raw.repeat(1, mul)[:, :ref_len]
     return raw
 
-if __name__ == "__main__":
-    dataset = ASVspoof2019LA(feature="Raw")
-    print(len(dataset))
-    featureTensor, filename, tag, label, _ = dataset[12]
-    print(featureTensor.shape)
