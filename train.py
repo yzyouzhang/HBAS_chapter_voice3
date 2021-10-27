@@ -155,6 +155,7 @@ def train(args):
         with open("./model_config_RawNet.yml", 'r') as f_yaml:
             parser1 = yaml.safe_load(f_yaml)
             feat_model = RawNet(parser1["model"], args).to(args.device)
+
     if args.continue_training:
         feat_model = torch.load(os.path.join(args.out_fold, 'anti-spoofing_feat_model.pt')).to(args.device)
     feat_optimizer = torch.optim.Adam(feat_model.parameters(), lr=args.lr,
@@ -202,6 +203,10 @@ def train(args):
         iso_loss = IsolateLoss(2, args.enc_dim, r_real=args.r_real, r_fake=args.r_fake).to(args.device)
         iso_loss.train()
         iso_optimizer = torch.optim.SGD(iso_loss.parameters(), lr=args.lr)
+    elif args.loss == "scl":
+        scl_loss = SingleCenterLoss(2, args.enc_dim, m=0.3).to(args.device)
+        scl_loss.train()
+        scl_optimizer = torch.optim.SGD(scl_loss.parameters(), lr=args.lr)
 
     early_stop_cnt = 0
     prev_loss = 1e8
@@ -222,6 +227,8 @@ def train(args):
             adjust_learning_rate(args, args.lr, ocsoftmax_optimizer, epoch_num)
         elif args.loss == "isolate":
             adjust_learning_rate(args, args.lr, iso_optimizer, epoch_num)
+        elif args.loss == "scl":
+            adjust_learning_rate(args, args.lr, scl_optimizer, epoch_num)
 
         if args.MT_AUG or args.ADV_AUG:
             adjust_learning_rate(args, args.lr_d, classifier_optimizer, epoch_num)
@@ -252,6 +259,9 @@ def train(args):
             elif args.loss == "isolate":
                 isoloss, _ = iso_loss(feats, labels)
                 feat_loss = isoloss
+            elif args.loss == "scl":
+                sclloss, _ = scl_loss(feats, labels)
+                feat_loss = sclloss
 
 
             if epoch_num > 0 and (args.MT_AUG or args.ADV_AUG):
@@ -284,6 +294,13 @@ def train(args):
                 feat_loss.backward()
                 feat_optimizer.step()
                 iso_optimizer.step()
+            elif args.loss == "scl":
+                scl_optimizer.zero_grad()
+                trainlossDict[args.loss].append(sclloss.item())
+                feat_optimizer.zero_grad()
+                feat_loss.backward()
+                feat_optimizer.step()
+                scl_optimizer.step()
 
 
 
@@ -347,6 +364,9 @@ def train(args):
                 elif args.loss == "isolate":
                     isoloss, score = iso_loss(feats, labels)
                     devlossDict[args.loss].append(isoloss.item())
+                elif args.loss == "scl":
+                    sclloss, score = scl_loss(feats, labels)
+                    devlossDict[args.loss].append(sclloss.item())
 
                 if epoch_num > 0 and (args.MT_AUG or args.ADV_AUG):
                     channel = channel.to(args.device)
@@ -404,6 +424,9 @@ def train(args):
                         elif args.loss == "isolate":
                             isoloss, score = iso_loss(feats, labels)
                             testlossDict[args.loss].append(isoloss.item())
+                        elif args.loss == "scl":
+                            sclloss, score = scl_loss(feats, labels)
+                            testlossDict[args.loss].append(sclloss.item())
 
                         ip1_loader.append(feats)
                         idx_loader.append((labels))
@@ -430,6 +453,8 @@ def train(args):
                 loss_model = ocsoftmax
             elif args.loss == "isolate":
                 loss_model = iso_loss
+            elif args.loss == "scl":
+                loss_model = scl_loss
             elif args.loss == "softmax":
                 loss_model = None
             else:
@@ -444,6 +469,8 @@ def train(args):
                 loss_model = ocsoftmax
             elif args.loss == "isolate":
                 loss_model = iso_loss
+            elif args.loss == "scl":
+                loss_model = scl_loss
             elif args.loss == "softmax":
                 loss_model = None
             else:

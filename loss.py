@@ -3,6 +3,7 @@ import torch.nn as nn
 from torch.autograd.function import Function
 import torch.nn.functional as F
 from torch.autograd import Variable
+import math
 
 
 class OCSoftmax(nn.Module):
@@ -70,12 +71,13 @@ class AMSoftmax(nn.Module):
 
 class IsolateLoss(nn.Module):
     """Isolate loss.
-
         Reference:
         I. Masi, A. Killekar, R. M. Mascarenhas, S. P. Gurudatt, and W. AbdAlmageed, “Two-branch Recurrent Network for Isolating Deepfakes in Videos,” 2020, [Online]. Available: http://arxiv.org/abs/2008.03412.
         Args:
             num_classes (int): number of classes.
             feat_dim (int): feature dimension.
+            r_real (float): small radius to keep real inside
+            r_fake (float): large radius to keep fake outside
         """
     def __init__(self, num_classes=2, feat_dim=256, r_real=25, r_fake=75):
         super(IsolateLoss, self).__init__()
@@ -94,6 +96,35 @@ class IsolateLoss(nn.Module):
         """
         loss = F.relu(torch.norm(x[labels==0]-self.center, p=2, dim=1) - self.r_real).mean() \
                + F.relu(self.r_fake - torch.norm(x[labels==1]-self.center, p=2, dim=1)).mean()
+        return loss, torch.norm(x-self.center, p=2, dim=1)
+
+
+class SingleCenterLoss(nn.Module):
+    """Single-Center loss.
+        Reference:
+        Li, J., Xie, H., Li, J., Wang, Z., & Zhang, Y. (2021). Frequency-aware Discriminative Feature Learning Supervised by Single-Center Loss for Face Forgery Detection. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (pp. 6458-6467).
+        Args:
+            num_classes (int): number of classes.
+            feat_dim (int): feature dimension.
+            m (float): scale factor that the margin is proportional to the square root of dimension
+        """
+    def __init__(self, num_classes=2, feat_dim=256, m=0.3):
+        super(SingleCenterLoss, self).__init__()
+        self.num_classes = num_classes
+        self.feat_dim = feat_dim
+        self.m = m
+
+        self.center = nn.Parameter(torch.randn(1, self.feat_dim))
+
+    def forward(self, x, labels):
+        """
+        Args:
+            x: feature matrix with shape (batch_size, feat_dim).
+            labels: ground truth labels with shape (batch_size).
+        """
+        m_nat = torch.norm(x[labels==0]-self.center, p=2, dim=1).mean()
+        m_man = torch.norm(x[labels==1]-self.center, p=2, dim=1).mean()
+        loss = m_nat - F.relu(m_nat - m_man + self.m * math.sqrt(self.feat_dim))
         return loss, torch.norm(x-self.center, p=2, dim=1)
 
 
