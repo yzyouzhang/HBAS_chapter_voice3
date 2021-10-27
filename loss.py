@@ -10,8 +10,8 @@ class OCSoftmax(nn.Module):
     def __init__(self, feat_dim=2, m_real=0.5, m_fake=0.2, alpha=20.0):
         super(OCSoftmax, self).__init__()
         self.feat_dim = feat_dim
-        self.r_real = r_real
-        self.r_fake = r_fake
+        self.m_real = m_real
+        self.m_fake = m_fake
         self.alpha = alpha
         self.center = nn.Parameter(torch.randn(1, self.feat_dim))
         nn.init.kaiming_uniform_(self.center, 0.25)
@@ -29,8 +29,8 @@ class OCSoftmax(nn.Module):
         scores = x @ w.transpose(0,1)
         output_scores = scores.clone()
 
-        scores[labels == 0] = self.r_real - scores[labels == 0]
-        scores[labels == 1] = scores[labels == 1] - self.r_fake
+        scores[labels == 0] = self.m_real - scores[labels == 0]
+        scores[labels == 1] = scores[labels == 1] - self.m_fake
 
         # loss = self.softplus(torch.logsumexp(self.alpha * scores, dim=0))
 
@@ -124,7 +124,7 @@ class SingleCenterLoss(nn.Module):
         """
         m_nat = torch.norm(x[labels==0]-self.center, p=2, dim=1).mean()
         m_man = torch.norm(x[labels==1]-self.center, p=2, dim=1).mean()
-        loss = m_nat - F.relu(m_nat - m_man + self.m * math.sqrt(self.feat_dim))
+        loss = m_nat + F.relu(m_nat - m_man + self.m * math.sqrt(self.feat_dim))
         return loss, torch.norm(x-self.center, p=2, dim=1)
 
 

@@ -4,6 +4,7 @@ import torch.nn.functional as torch_nn_func
 import numpy as np
 import librosa
 import pickle
+import sys
 
 ## Adapted from https://github.com/nii-yamagishilab/project-NN-Pytorch-scripts/blob/newfunctions/
 
@@ -31,10 +32,10 @@ def trimf(x, params):
         sys.exit(1)
     y = torch.zeros_like(x, dtype=torch.float32)
     if a < b:
-        index = np.logical_and(a < x, x < b)
+        index = np.logical_and(a < x, x < b).bool()
         y[index] = (x[index] - a) / (b - a)
     if b < c:
-        index = np.logical_and(b < x, x < c)
+        index = np.logical_and(b < x, x < c).bool()
         y[index] = (c - x[index]) / (c - b)
     y[x == b] = 1
     return y
@@ -52,7 +53,6 @@ def delta(x):
     Delta is calculated along Length
     """
     length = x.shape[1]
-    output = torch.zeros_like(x)
     x_temp = torch_nn_func.pad(x.unsqueeze(1), (0, 0, 1, 1),
                                'replicate').squeeze(1)
     output = -1 * x_temp[:, 0:length] + x_temp[:, 2:]
@@ -111,7 +111,8 @@ class LFCC(torch_nn.Module):
 
         x_stft = torch.stft(x, self.fn, self.fs, self.fl,
                             window=self.window,
-                            onesided=True, pad_mode="constant")
+                            onesided=True, pad_mode="constant",
+                            return_complex=False)
         # amplitude
         sp_amp = torch.norm(x_stft, 2, -1).pow(2).permute(0, 2, 1).contiguous()
 

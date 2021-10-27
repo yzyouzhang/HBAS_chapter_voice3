@@ -58,7 +58,7 @@ def initParams():
 
     parser.add_argument('--loss', type=str, default="ocsoftmax",
                         choices=["softmax", "amsoftmax", "ocsoftmax", "isolate", "scl"], help="add other loss for one-class training")
-    parser.add_argument('--weight_loss', type=float, default=1, help="weight for other loss")
+    parser.add_argument('--weight_loss', type=float, default=0.5, help="weight for other loss")
     parser.add_argument('--m_real', type=float, default=0.5, help="m_real for ocsoftmax loss")
     parser.add_argument('--m_fake', type=float, default=0.1, help="m_fake for ocsoftmax loss")
     parser.add_argument('--r_real', type=float, default=25.0, help="r_real for isolate loss")
@@ -261,7 +261,7 @@ def train(args):
                 feat_loss = isoloss
             elif args.loss == "scl":
                 sclloss, _ = scl_loss(feats, labels)
-                feat_loss = sclloss
+                feat_loss = criterion(feat_outputs, labels) + sclloss * args.weight_loss
 
 
             if epoch_num > 0 and (args.MT_AUG or args.ADV_AUG):
