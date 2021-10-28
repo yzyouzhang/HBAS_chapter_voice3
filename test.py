@@ -28,8 +28,9 @@ def init():
     parser.add_argument("-t", "--task", type=str, help="which dataset you would like to test on",
                         required=True, default='ASVspoof2019LA',
                         choices=["ASVspoof2019LA", "ASVspoof2015", "VCC2020", "ASVspoof2019LASim"])
-    parser.add_argument('-l', '--loss', help='loss for scoring', default="ocsoftmax",
-                        required=False, choices=[None, "ocsoftmax", "amsoftmax", "p2sgrad"])
+    parser.add_argument('-l', '--loss', type=str, default="ocsoftmax",
+                        choices=["softmax", "amsoftmax", "ocsoftmax", "isolate", "scl"],
+                        help="loss for scoring")
     parser.add_argument("--feat", type=str, help="which feature to use", default='LFCC',
                         choices=["CQCC", "LFCC", "Raw"])
     parser.add_argument("--feat_len", type=int, help="features length", default=500)
@@ -72,14 +73,19 @@ def test_model(feat_model_path, loss_model_path, part, add_loss):
 
             feats, feat_outputs = model(feat)
 
-            score = F.softmax(feat_outputs)[:, 0]
-
-            if add_loss == "ocsoftmax":
+            if add_loss == "softmax":
+                score = F.softmax(feat_outputs)[:, 0]
+            elif add_loss == "ocsoftmax":
                 ang_isoloss, score = loss_model(feats, labels)
+            elif add_loss == "isolate":
+                _, score = loss_model(feats, labels)
+            elif add_loss == "scl":
+                _, score = loss_model(feats, labels)
             elif add_loss == "amsoftmax":
                 outputs, moutputs = loss_model(feats, labels)
                 score = F.softmax(outputs, dim=1)[:, 0]
-            else: pass
+            else:
+                raise ValueError("what is the loss?")
 
             for j in range(labels.size(0)):
                 cm_score_file.write(
@@ -295,8 +301,8 @@ if __name__ == "__main__":
 
     args = init()
 
-    model_path = os.path.join(args.model_dir, "anti-spoofing_feat_model.pt")
-    loss_model_path = os.path.join(args.model_dir, "anti-spoofing_loss_model.pt")
+    model_path = os.path.join(args.model_dir, "checkpoint/anti-spoofing_feat_model_95.pt")
+    loss_model_path = os.path.join(args.model_dir, "checkpoint/anti-spoofing_loss_model_95.pt")
 
     if args.task == "ASVspoof2019LA":
         eer = test_model(model_path, loss_model_path, "eval", args.loss)

@@ -45,8 +45,8 @@ def initParams():
     parser.add_argument('--num_epochs', type=int, default=100, help="Number of epochs for training")
     parser.add_argument('--batch_size', type=int, default=128, help="Mini batch size for training")
     parser.add_argument('--lr', type=float, default=0.0003, help="learning rate")
-    parser.add_argument('--lr_decay', type=float, default=0.8, help="decay learning rate")
-    parser.add_argument('--interval', type=int, default=25, help="interval to decay lr")
+    parser.add_argument('--lr_decay', type=float, default=0.5, help="decay learning rate")
+    parser.add_argument('--interval', type=int, default=20, help="interval to decay lr")
 
     parser.add_argument('--beta_1', type=float, default=0.9, help="bata_1 for Adam")
     parser.add_argument('--beta_2', type=float, default=0.999, help="beta_2 for Adam")
@@ -55,7 +55,7 @@ def initParams():
     parser.add_argument('--num_workers', type=int, default=0, help="number of workers")
 
     parser.add_argument('-l', '--loss', type=str, default="ocsoftmax",
-                        choices=["softmax", "amsoftmax", "ocsoftmax", "isolate", "scl"], help="add other loss for one-class training")
+                        choices=["softmax", "amsoftmax", "ocsoftmax", "isolate", "scl"], help="loss for training")
     parser.add_argument('--weight_loss', type=float, default=0.5, help="weight for other loss")
     parser.add_argument('--m_real', type=float, default=0.5, help="m_real for ocsoftmax loss")
     parser.add_argument('--m_fake', type=float, default=0.1, help="m_fake for ocsoftmax loss")
@@ -207,10 +207,7 @@ def train(args):
     early_stop_cnt = 0
     prev_loss = 1e8
 
-    if args.loss =="softmax":
-        monitor_loss = 'base_loss'
-    else:
-        monitor_loss = args.loss
+    monitor_loss = args.loss
 
     for epoch_num in tqdm(range(args.num_epochs)):
         genuine_feats, ip1_loader, tag_loader, idx_loader = [], [], [], []
@@ -272,7 +269,7 @@ def train(args):
 
             ## backward
             if args.loss == "softmax":
-                trainlossDict['base_loss'].append(feat_loss.item())
+                trainlossDict[args.loss].append(feat_loss.item())
                 feat_optimizer.zero_grad()
                 feat_loss.backward()
                 feat_optimizer.step()
@@ -351,9 +348,10 @@ def train(args):
                 feat, tags, labels = shuffle(feat, tags, labels)
                 feats, feat_outputs = feat_model(feat)
 
-                feat_loss = criterion(feat_outputs, labels)
                 if args.loss == "softmax":
+                    feat_loss = criterion(feat_outputs, labels)
                     score = F.softmax(feat_outputs, dim=1)[:, 0]
+                    devlossDict[args.loss].append(feat_loss.item())
                 elif args.loss == "ocsoftmax":
                     ocsoftmaxloss, score = ocsoftmax(feats, labels)
                     devlossDict[args.loss].append(ocsoftmaxloss.item())
@@ -362,6 +360,7 @@ def train(args):
                     devlossDict[args.loss].append(isoloss.item())
                 elif args.loss == "scl":
                     sclloss, score = scl_loss(feats, labels)
+                    sclloss = criterion(feat_outputs, labels) + sclloss * args.weight_loss
                     devlossDict[args.loss].append(sclloss.item())
 
                 if epoch_num > 0 and (args.MT_AUG or args.ADV_AUG):
@@ -443,6 +442,7 @@ def train(args):
 
         valLoss = np.nanmean(devlossDict[monitor_loss])
         if (epoch_num + 1) % args.test_interval == 0:
+            # Save the model checkpoint
             torch.save(feat_model, os.path.join(args.out_fold, 'checkpoint',
                                                 'anti-spoofing_feat_model_%d.pt' % (epoch_num + 1)))
             if args.loss == "ocsoftmax":
@@ -459,7 +459,6 @@ def train(args):
                                                 'anti-spoofing_loss_model_%d.pt' % (epoch_num + 1)))
 
         if valLoss < prev_loss:
-            # Save the model checkpoint
             torch.save(feat_model, os.path.join(args.out_fold, 'anti-spoofing_feat_model.pt'))
             if args.loss == "ocsoftmax":
                 loss_model = ocsoftmax
@@ -478,9 +477,9 @@ def train(args):
         else:
             early_stop_cnt += 1
 
-        if early_stop_cnt == 20:
+        if early_stop_cnt == 50:
             with open(os.path.join(args.out_fold, 'args.json'), 'a') as res_file:
-                res_file.write('\nTrained Epochs: %d\n' % (epoch_num - 19))
+                res_file.write('\nTrained Epochs: %d\n' % (epoch_num - 49))
             break
 
     return feat_model, loss_model
