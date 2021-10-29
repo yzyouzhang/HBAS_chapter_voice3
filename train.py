@@ -189,7 +189,7 @@ def train(args):
     feat, _, _, _, _ = training_set[23]
     print("Feature shape", feat.shape)
 
-    criterion = nn.CrossEntropyLoss()
+    criterion = nn.CrossEntropyLoss(weight=torch.FloatTensor([0.1, 0.9]).to(args.device))
 
     if args.loss == "ocsoftmax":
         ocsoftmax = OCSoftmax(args.enc_dim, m_real=args.m_real, m_fake=args.m_fake, alpha=args.alpha).to(args.device)
