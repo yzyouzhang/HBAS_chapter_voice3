@@ -441,7 +441,7 @@ def train(args):
 
 
         valLoss = np.nanmean(devlossDict[monitor_loss])
-        if (epoch_num + 1) % args.test_interval == 0:
+        if (epoch_num + 1) % args.save_interval == 0:
             # Save the model checkpoint
             torch.save(feat_model, os.path.join(args.out_fold, 'checkpoint',
                                                 'anti-spoofing_feat_model_%d.pt' % (epoch_num + 1)))

@@ -53,7 +53,7 @@ class ASVspoof2019LA(Dataset):
             if this_feat_len > self.feat_len:
                 startp = np.random.randint(this_feat_len - self.feat_len)
                 featureTensor = featureTensor[:, startp:startp + self.feat_len, :]
-            if this_feat_len < self.feat_len:
+            elif this_feat_len < self.feat_len:
                 featureTensor = repeat_padding_Tensor(featureTensor, self.feat_len)
         else:
             # file_path = os.path.join(self.path_to_audio, "LA/ASVspoof2019_LA_" + self.part, "flac", filename+".flac")

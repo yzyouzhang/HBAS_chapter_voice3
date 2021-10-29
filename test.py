@@ -301,8 +301,8 @@ if __name__ == "__main__":
 
     args = init()
 
-    model_path = os.path.join(args.model_dir, "checkpoint/anti-spoofing_feat_model_95.pt")
-    loss_model_path = os.path.join(args.model_dir, "checkpoint/anti-spoofing_loss_model_95.pt")
+    model_path = os.path.join(args.model_dir, "anti-spoofing_feat_model.pt")
+    loss_model_path = os.path.join(args.model_dir, "anti-spoofing_loss_model.pt")
 
     if args.task == "ASVspoof2019LA":
         eer = test_model(model_path, loss_model_path, "eval", args.loss)
