@@ -89,6 +89,9 @@ def initParams():
     # Set seeds
     setup_seed(args.seed)
 
+    if any([args.feat == "Raw", args.model == "rawnet", args.feat_len > 16000]):
+        assert all([args.feat == "Raw", args.model == "rawnet", args.feat_len > 16000])
+
     if args.test_only or args.continue_training:
         pass
     else:
@@ -147,7 +150,7 @@ def train(args):
     if args.model == 'resnet':
         feat_model = ResNet(3, args.enc_dim, resnet_type='18', nclasses=2).to(args.device)
     elif args.model == 'lcnn':
-        feat_model = LCNN(4, args.enc_dim, nclasses=2).to(args.device)
+        feat_model = LCNN(4, args, nclasses=2).to(args.device)
     elif args.model == 'rawnet':
         assert args.feat == "Raw"
         with open("./model_config_RawNet.yml", 'r') as f_yaml:

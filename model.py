@@ -233,10 +233,10 @@ class MaxFeatureMap2D(nn.Module):
 
 
 class LCNN(nn.Module):
-    def __init__(self, num_nodes, enc_dim, nclasses=2):
+    def __init__(self, num_nodes, args, nclasses=2):
         super(LCNN, self).__init__()
         self.num_nodes = num_nodes
-        self.enc_dim = enc_dim
+        self.enc_dim = args.enc_dim
         self.nclasses = nclasses
         self.conv1 = nn.Sequential(nn.Conv2d(1, 64, (5, 5), 1, padding=(2, 2)),
                                    MaxFeatureMap2D(),
@@ -267,10 +267,10 @@ class LCNN(nn.Module):
                                    MaxFeatureMap2D(),
                                    nn.MaxPool2d((2, 2), (2, 2)))
         self.out = nn.Sequential(nn.Dropout(0.7),
-                                 nn.Linear((750 // 16) * (60 // 16) * 32, 160),
+                                 nn.Linear((args.feat_len // 16) * (60 // 16) * 32, 160),
                                  MaxFeatureMap2D(),
                                  nn.Linear(80, self.enc_dim))
-        self.fc_mu = nn.Linear(enc_dim, nclasses) if nclasses >= 2 else nn.Linear(enc_dim, 1)
+        self.fc_mu = nn.Linear(self.enc_dim, nclasses) if nclasses >= 2 else nn.Linear(self.enc_dim, 1)
 
     def forward(self, x):
 
