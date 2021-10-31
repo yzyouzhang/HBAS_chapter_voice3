@@ -61,7 +61,8 @@ def initParams():
     parser.add_argument('--m_fake', type=float, default=0.1, help="m_fake for ocsoftmax loss")
     parser.add_argument('--r_real', type=float, default=25.0, help="r_real for isolate loss")
     parser.add_argument('--r_fake', type=float, default=75.0, help="r_fake for isolate loss")
-    parser.add_argument('--alpha', type=float, default=20, help="scale factor for angular isolate loss")
+    parser.add_argument('--alpha', type=float, default=20, help="scale factor for amsoftmax and ocsoftmax loss")
+    parser.add_argument('--scale_factor', type=float, default=0.5, help="scale factor for single center loss")
 
     parser.add_argument('--test_only', action='store_true', help="test the trained model in case the test crash sometimes or another test method")
     parser.add_argument('--continue_training', action='store_true', help="continue training with trained model")
@@ -203,9 +204,14 @@ def train(args):
         iso_loss.train()
         iso_optimizer = torch.optim.SGD(iso_loss.parameters(), lr=args.lr)
     elif args.loss == "scl":
-        scl_loss = SingleCenterLoss(2, args.enc_dim, m=0.3).to(args.device)
+        scl_loss = SingleCenterLoss(2, args.enc_dim, m=args.scale_factor).to(args.device)
         scl_loss.train()
         scl_optimizer = torch.optim.SGD(scl_loss.parameters(), lr=args.lr)
+    elif args.loss == "amsoftmax":
+        amsoftmax_loss = AMSoftmax(2, args.enc_dim, s=args.alpha, m=args.m_real).to(args.device)
+        amsoftmax_loss.train()
+        amsoftmax_optimizer = torch.optim.SGD(amsoftmax_loss.parameters(), lr=0.01)
+
 
     early_stop_cnt = 0
     prev_loss = 1e8
@@ -225,6 +231,8 @@ def train(args):
             adjust_learning_rate(args, args.lr, iso_optimizer, epoch_num)
         elif args.loss == "scl":
             adjust_learning_rate(args, args.lr, scl_optimizer, epoch_num)
+        elif args.loss == "amsoftmax":
+            adjust_learning_rate(args, args.lr, amsoftmax_optimizer, epoch_num)
 
         if args.MT_AUG or args.ADV_AUG:
             adjust_learning_rate(args, args.lr_d, classifier_optimizer, epoch_num)
@@ -258,6 +266,9 @@ def train(args):
             elif args.loss == "scl":
                 sclloss, _ = scl_loss(feats, labels)
                 feat_loss = criterion(feat_outputs, labels) + sclloss * args.weight_loss
+            elif args.loss == "amsoftmax":
+                outputs, moutputs = amsoftmax_loss(feats, labels)
+                feat_loss = criterion(moutputs, labels)
 
 
             if epoch_num > 0 and (args.MT_AUG or args.ADV_AUG):
@@ -297,6 +308,13 @@ def train(args):
                 feat_loss.backward()
                 feat_optimizer.step()
                 scl_optimizer.step()
+            elif args.loss == "amsoftmax":
+                trainlossDict[args.loss].append(feat_loss.item())
+                feat_optimizer.zero_grad()
+                amsoftmax_optimizer.zero_grad()
+                feat_loss.backward()
+                feat_optimizer.step()
+                amsoftmax_optimizer.step()
 
 
 
@@ -365,6 +383,11 @@ def train(args):
                     sclloss, score = scl_loss(feats, labels)
                     sclloss = criterion(feat_outputs, labels) + sclloss * args.weight_loss
                     devlossDict[args.loss].append(sclloss.item())
+                elif args.loss == "amsoftmax":
+                    outputs, moutputs = amsoftmax_loss(feats, labels)
+                    feat_loss = criterion(moutputs, labels)
+                    score = F.softmax(outputs, dim=1)[:, 0]
+                    devlossDict[args.loss].append(feat_loss.item())
 
                 if epoch_num > 0 and (args.MT_AUG or args.ADV_AUG):
                     channel = channel.to(args.device)
@@ -413,7 +436,9 @@ def train(args):
                         labels = labels.to(args.device)
                         feats, feat_outputs = feat_model(feat)
                         if args.loss == "softmax":
+                            feat_loss = criterion(feat_outputs, labels)
                             score = F.softmax(feat_outputs, dim=1)[:, 0]
+                            testlossDict[args.loss].append(feat_loss.item())
                         elif args.loss == "ocsoftmax":
                             ocsoftmaxloss, score = ocsoftmax(feats, labels)
                             testlossDict[args.loss].append(ocsoftmaxloss.item())
@@ -423,6 +448,11 @@ def train(args):
                         elif args.loss == "scl":
                             sclloss, score = scl_loss(feats, labels)
                             testlossDict[args.loss].append(sclloss.item())
+                        elif args.loss == "amsoftmax":
+                            outputs, moutputs = amsoftmax_loss(feats, labels)
+                            feat_loss = criterion(moutputs, labels)
+                            score = F.softmax(outputs, dim=1)[:, 0]
+                            testlossDict[args.loss].append(feat_loss.item())
 
                         ip1_loader.append(feats)
                         idx_loader.append((labels))
@@ -452,6 +482,8 @@ def train(args):
                 loss_model = scl_loss
             elif args.loss == "softmax":
                 loss_model = None
+            elif args.loss == "amsoftmax":
+                loss_model = amsoftmax_loss
             else:
                 print("What is your loss? You may encounter error.")
             torch.save(loss_model, os.path.join(args.out_fold, 'checkpoint',
@@ -467,6 +499,8 @@ def train(args):
                 loss_model = scl_loss
             elif args.loss == "softmax":
                 loss_model = None
+            elif args.loss == "amsoftmax":
+                loss_model = amsoftmax_loss
             else:
                 print("What is your loss? You may encounter error.")
             torch.save(loss_model, os.path.join(args.out_fold, 'anti-spoofing_loss_model.pt'))

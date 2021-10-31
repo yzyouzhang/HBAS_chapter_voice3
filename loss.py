@@ -43,7 +43,7 @@ class OCSoftmax(nn.Module):
 
 
 class AMSoftmax(nn.Module):
-    def __init__(self, num_classes, enc_dim, s=20, m=0.9):
+    def __init__(self, num_classes, enc_dim, s=20, m=0.5):
         super(AMSoftmax, self).__init__()
         self.enc_dim = enc_dim
         self.num_classes = num_classes

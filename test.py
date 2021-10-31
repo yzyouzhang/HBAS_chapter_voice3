@@ -153,7 +153,7 @@ def test_on_VCC(feat_model_path, loss_model_path, part, add_loss):
 
     scores = torch.cat(score_loader, 0).data.cpu().numpy()
     labels = torch.cat(idx_loader, 0).data.cpu().numpy()
-    eer = em.compute_eer(scores[labels == 0], scores[labels == 1])[0
+    eer = em.compute_eer(scores[labels == 0], scores[labels == 1])[0]
 
     return eer
 
