@@ -31,6 +31,7 @@ def init():
     parser.add_argument('-l', '--loss', type=str, default="ocsoftmax",
                         choices=["softmax", "amsoftmax", "ocsoftmax", "isolate", "scl"],
                         help="loss for scoring")
+    parser.add_argument('--weight_loss', type=float, default=0.5, help="weight for other loss")
     parser.add_argument("--feat", type=str, help="which feature to use", default='LFCC',
                         choices=["CQCC", "LFCC", "Raw"])
     parser.add_argument("--feat_len", type=int, help="features length", default=500)
@@ -45,7 +46,7 @@ def init():
 
     return args
 
-def test_model(feat_model_path, loss_model_path, part, add_loss):
+def test_model_on_ASVspoof2019LA(feat_model_path, loss_model_path, part, add_loss):
     dirname = os.path.dirname
     basename = os.path.splitext(os.path.basename(feat_model_path))[0]
     if "checkpoint" in dirname(feat_model_path):
@@ -80,7 +81,9 @@ def test_model(feat_model_path, loss_model_path, part, add_loss):
             elif add_loss == "isolate":
                 _, score = loss_model(feats, labels)
             elif add_loss == "scl":
-                _, score = loss_model(feats, labels)
+                score_softmax = F.softmax(feat_outputs)[:, 0]
+                _, score_scl = loss_model(feats, labels)
+                score = score_softmax + args.weight_loss * score_scl
             elif add_loss == "amsoftmax":
                 outputs, moutputs = loss_model(feats, labels)
                 score = F.softmax(outputs, dim=1)[:, 0]
@@ -99,8 +102,6 @@ def test_model(feat_model_path, loss_model_path, part, add_loss):
     scores = torch.cat(score_loader, 0).data.cpu().numpy()
     labels = torch.cat(idx_loader, 0).data.cpu().numpy()
     eer = em.compute_eer(scores[labels == 0], scores[labels == 1])[0]
-    other_eer = em.compute_eer(-scores[labels == 0], -scores[labels == 1])[0]
-    eer = min(eer, other_eer)
 
     return eer
 
@@ -152,9 +153,7 @@ def test_on_VCC(feat_model_path, loss_model_path, part, add_loss):
 
     scores = torch.cat(score_loader, 0).data.cpu().numpy()
     labels = torch.cat(idx_loader, 0).data.cpu().numpy()
-    eer = em.compute_eer(scores[labels == 0], scores[labels == 1])[0]
-    other_eer = em.compute_eer(-scores[labels == 0], -scores[labels == 1])[0]
-    eer = min(eer, other_eer)
+    eer = em.compute_eer(scores[labels == 0], scores[labels == 1])[0
 
     return eer
 
@@ -208,8 +207,6 @@ def test_on_ASVspoof2015(feat_model_path, loss_model_path, part, add_loss):
     scores = torch.cat(score_loader, 0).data.cpu().numpy()
     labels = torch.cat(idx_loader, 0).data.cpu().numpy()
     eer = em.compute_eer(scores[labels == 0], scores[labels == 1])[0]
-    other_eer = em.compute_eer(-scores[labels == 0], -scores[labels == 1])[0]
-    eer = min(eer, other_eer)
 
     return eer
 
@@ -232,10 +229,7 @@ def test_individual_attacks(cm_score_file):
 
         # EERs of the standalone systems and fix ASV operating point to EER threshold
         eer_cm = em.compute_eer(bona_cm, spoof_cm)[0]
-
-        other_eer_cm = em.compute_eer(other_cm_scores[cm_keys == 'bonafide'], other_cm_scores[cm_sources == 'A%02d' % attack_idx])[0]
-
-        eer_cm_lst.append(min(eer_cm, other_eer_cm))
+        eer_cm_lst.append(eer_cm)
 
     return eer_cm_lst
 
@@ -289,8 +283,6 @@ def test_on_ASVspoof2019LASim(feat_model_path, loss_model_path, part, add_loss):
     scores = torch.cat(score_loader, 0).data.cpu().numpy()
     labels = torch.cat(idx_loader, 0).data.cpu().numpy()
     eer = em.compute_eer(scores[labels == 0], scores[labels == 1])[0]
-    other_eer = em.compute_eer(-scores[labels == 0], -scores[labels == 1])[0]
-    eer = min(eer, other_eer)
 
     return eer
 
@@ -305,7 +297,7 @@ if __name__ == "__main__":
     loss_model_path = os.path.join(args.model_dir, "anti-spoofing_loss_model.pt")
 
     if args.task == "ASVspoof2019LA":
-        eer = test_model(model_path, loss_model_path, "eval", args.loss)
+        eer = test_model_on_ASVspoof2019LA(model_path, loss_model_path, "eval", args.loss)
     elif args.task == "ASVspoof2015":
         eer = test_on_ASVspoof2015(model_path, loss_model_path, "eval", args.loss)
     elif args.task =="VCC2020":

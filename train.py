@@ -384,8 +384,6 @@ def train(args):
             scores = torch.cat(score_loader, 0).data.cpu().numpy()
             labels = torch.cat(idx_loader, 0).data.cpu().numpy()
             eer = em.compute_eer(scores[labels == 0], scores[labels == 1])[0]
-            other_eer = em.compute_eer(-scores[labels == 0], -scores[labels == 1])[0]
-            eer = min(eer, other_eer)
 
             if epoch_num > 0 and (args.MT_AUG or args.ADV_AUG):
                 with open(os.path.join(args.out_fold, "dev_loss.log"), "a") as log:
@@ -435,8 +433,6 @@ def train(args):
                     scores = torch.cat(score_loader, 0).data.cpu().numpy()
                     labels = torch.cat(idx_loader, 0).data.cpu().numpy()
                     eer = em.compute_eer(scores[labels == 0], scores[labels == 1])[0]
-                    other_eer = em.compute_eer(-scores[labels == 0], -scores[labels == 1])[0]
-                    eer = min(eer, other_eer)
 
                     with open(os.path.join(args.out_fold, "test_loss.log"), "a") as log:
                         log.write(str(epoch_num) + "\t" + str(np.nanmean(testlossDict[monitor_loss])) + "\t" + str(eer) + "\n")

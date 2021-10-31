@@ -39,7 +39,7 @@ class OCSoftmax(nn.Module):
 
         loss = self.softplus(self.alpha * scores).mean()
 
-        return loss, -output_scores.squeeze(1)
+        return loss, output_scores.squeeze(1)
 
 
 class AMSoftmax(nn.Module):
@@ -96,7 +96,7 @@ class IsolateLoss(nn.Module):
         """
         loss = F.relu(torch.norm(x[labels==0]-self.center, p=2, dim=1) - self.r_real).mean() \
                + F.relu(self.r_fake - torch.norm(x[labels==1]-self.center, p=2, dim=1)).mean()
-        return loss, torch.norm(x-self.center, p=2, dim=1)
+        return loss, -torch.norm(x-self.center, p=2, dim=1)
 
 
 class SingleCenterLoss(nn.Module):
@@ -125,29 +125,10 @@ class SingleCenterLoss(nn.Module):
         m_nat = torch.norm(x[labels==0]-self.center, p=2, dim=1).mean()
         m_man = torch.norm(x[labels==1]-self.center, p=2, dim=1).mean()
         loss = m_nat + F.relu(m_nat - m_man + self.m * math.sqrt(self.feat_dim))
-        return loss, torch.norm(x-self.center, p=2, dim=1)
+        return loss, -torch.norm(x-self.center, p=2, dim=1)
 
 
 if __name__ == "__main__":
-    # feats = torch.randn((32, 90)).cuda()
-    # centers = torch.randn((3,90)).cuda()
-    # # o = torch.norm(feats - center, p=2, dim=1)
-    # # print(o.shape)
-    # # dist = torch.cat((o, o), dim=1)
-    # # print(dist.shape)
-    # labels = torch.cat((torch.Tensor([0]).repeat(10),
-    #                    torch.Tensor([1]).repeat(22)),0).cuda()
-    # # classes = torch.arange(2).long().cuda()
-    # # labels = labels.expand(32, 2)
-    # # print(labels)
-    # # mask = labels.eq(classes.expand(32, 2))
-    # # print(mask)
-    #
-    # iso_loss = MultiCenterIsolateLoss(centers, 2, 90).cuda()
-    # loss = iso_loss(feats, labels)
-    # for p in iso_loss.parameters():
-    #     print(p)
-    # # print(loss.shape)
 
     feat_dim = 16
     feats = torch.randn((32, feat_dim))
