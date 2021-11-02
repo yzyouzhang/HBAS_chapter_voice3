@@ -404,7 +404,7 @@ def train(args):
                     score = F.softmax(outputs, dim=1)[:, 0]
                     devlossDict[args.loss].append(feat_loss.item())
                 elif args.loss == "angulariso":
-                    angularisoloss, score = ocsoftmax(feats, labels)
+                    angularisoloss, score = angulariso(feats, labels)
                     devlossDict[args.loss].append(angularisoloss.item())
 
 
