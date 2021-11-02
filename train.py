@@ -55,7 +55,7 @@ def initParams():
     parser.add_argument('--num_workers', type=int, default=0, help="number of workers")
 
     parser.add_argument('-l', '--loss', type=str, default="ocsoftmax",
-                        choices=["softmax", "amsoftmax", "ocsoftmax", "isolate", "scl"], help="loss for training")
+                        choices=["softmax", "amsoftmax", "ocsoftmax", "isolate", "scl", "angulariso"], help="loss for training")
     parser.add_argument('--weight_loss', type=float, default=0.5, help="weight for other loss")
     parser.add_argument('--m_real', type=float, default=0.5, help="m_real for ocsoftmax loss")
     parser.add_argument('--m_fake', type=float, default=0.1, help="m_fake for ocsoftmax loss")
@@ -211,7 +211,10 @@ def train(args):
         amsoftmax_loss = AMSoftmax(2, args.enc_dim, s=args.alpha, m=args.m_real).to(args.device)
         amsoftmax_loss.train()
         amsoftmax_optimizer = torch.optim.SGD(amsoftmax_loss.parameters(), lr=0.01)
-
+    elif args.loss == "angulariso":
+        angulariso = AngularIsoLoss(args.enc_dim, m_real=args.m_real, m_fake=args.m_fake, alpha=args.alpha).to(args.device)
+        angulariso.train()
+        angulariso_optimizer = torch.optim.SGD(angulariso.parameters(), lr=args.lr)
 
     early_stop_cnt = 0
     prev_loss = 1e8
@@ -233,6 +236,8 @@ def train(args):
             adjust_learning_rate(args, args.lr, scl_optimizer, epoch_num)
         elif args.loss == "amsoftmax":
             adjust_learning_rate(args, args.lr, amsoftmax_optimizer, epoch_num)
+        elif args.loss == "angulariso":
+            adjust_learning_rate(args, args.lr, angulariso_optimizer, epoch_num)
 
         if args.MT_AUG or args.ADV_AUG:
             adjust_learning_rate(args, args.lr_d, classifier_optimizer, epoch_num)
@@ -269,6 +274,9 @@ def train(args):
             elif args.loss == "amsoftmax":
                 outputs, moutputs = amsoftmax_loss(feats, labels)
                 feat_loss = criterion(moutputs, labels)
+            elif args.loss == "angulariso":
+                angularisoloss, _ = angulariso(feats, labels)
+                feat_loss = angularisoloss
 
 
             if epoch_num > 0 and (args.MT_AUG or args.ADV_AUG):
@@ -315,6 +323,13 @@ def train(args):
                 feat_loss.backward()
                 feat_optimizer.step()
                 amsoftmax_optimizer.step()
+            elif args.loss == "angulariso":
+                angulariso_optimizer.zero_grad()
+                trainlossDict[args.loss].append(angularisoloss.item())
+                feat_optimizer.zero_grad()
+                feat_loss.backward()
+                feat_optimizer.step()
+                angulariso_optimizer.step()
 
 
 
@@ -388,6 +403,10 @@ def train(args):
                     feat_loss = criterion(moutputs, labels)
                     score = F.softmax(outputs, dim=1)[:, 0]
                     devlossDict[args.loss].append(feat_loss.item())
+                elif args.loss == "angulariso":
+                    angularisoloss, score = ocsoftmax(feats, labels)
+                    devlossDict[args.loss].append(angularisoloss.item())
+
 
                 if epoch_num > 0 and (args.MT_AUG or args.ADV_AUG):
                     channel = channel.to(args.device)
@@ -453,6 +472,9 @@ def train(args):
                             feat_loss = criterion(moutputs, labels)
                             score = F.softmax(outputs, dim=1)[:, 0]
                             testlossDict[args.loss].append(feat_loss.item())
+                        elif args.loss == "angulariso":
+                            angularisoloss, score = angulariso(feats, labels)
+                            testlossDict[args.loss].append(angularisoloss.item())
 
                         ip1_loader.append(feats)
                         idx_loader.append((labels))
@@ -484,6 +506,8 @@ def train(args):
                 loss_model = None
             elif args.loss == "amsoftmax":
                 loss_model = amsoftmax_loss
+            elif args.loss == "angulariso":
+                loss_model = angulariso
             else:
                 print("What is your loss? You may encounter error.")
             torch.save(loss_model, os.path.join(args.out_fold, 'checkpoint',
@@ -501,6 +525,8 @@ def train(args):
                 loss_model = None
             elif args.loss == "amsoftmax":
                 loss_model = amsoftmax_loss
+            elif args.loss == "angulariso":
+                loss_model = angulariso
             else:
                 print("What is your loss? You may encounter error.")
             torch.save(loss_model, os.path.join(args.out_fold, 'anti-spoofing_loss_model.pt'))
