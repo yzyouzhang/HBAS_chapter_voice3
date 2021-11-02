@@ -1,5 +1,4 @@
 import torch
-import torch.nn as nn
 import argparse
 import os
 import json
@@ -8,10 +7,9 @@ import numpy as np
 from model import *
 from dataset import *
 from torch.utils.data import DataLoader
-from evaluate_tDCF_asvspoof19 import compute_eer_and_tdcf
 from loss import *
 from collections import defaultdict
-from tqdm import tqdm, trange
+from tqdm import tqdm
 from utils import str2bool, setup_seed
 import eval_metrics as em
 import yaml
