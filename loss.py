@@ -149,22 +149,7 @@ class AngularIsoLoss(nn.Module):
         scores[labels == 0] = self.m_real - scores[labels == 0]
         scores[labels == 1] = scores[labels == 1] - self.m_fake
 
-        # print(torch.logsumexp(self.alpha * scores[labels == 0], dim=0).shape)
-
         loss = self.softplus(torch.logsumexp(self.alpha * scores[labels == 0], dim=0)) + \
                self.softplus(torch.logsumexp(self.alpha * scores[labels == 1], dim=0))
 
-        # print(loss.shape)
-
         return loss, output_scores.squeeze(1)
-
-
-if __name__ == "__main__":
-
-    feat_dim = 16
-    feats = torch.randn((32, feat_dim))
-    labels = torch.cat((torch.Tensor([0]).repeat(10),
-                        torch.Tensor([1]).repeat(22)), 0).cuda()
-    aisoloss = OCSoftmax(feat_dim=feat_dim)
-    loss = aisoloss(feats, labels)
-    print(loss)
