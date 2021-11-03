@@ -55,8 +55,8 @@ def initParams():
     parser.add_argument('-l', '--loss', type=str, default="ocsoftmax",
                         choices=["softmax", "amsoftmax", "ocsoftmax", "isolate", "scl", "angulariso"], help="loss for training")
     parser.add_argument('--weight_loss', type=float, default=0.5, help="weight for other loss")
-    parser.add_argument('--m_real', type=float, default=0.5, help="m_real for ocsoftmax loss")
-    parser.add_argument('--m_fake', type=float, default=0.1, help="m_fake for ocsoftmax loss")
+    parser.add_argument('--m_real', type=float, default=0.9, help="m_real for ocsoftmax loss")
+    parser.add_argument('--m_fake', type=float, default=0.2, help="m_fake for ocsoftmax loss")
     parser.add_argument('--r_real', type=float, default=25.0, help="r_real for isolate loss")
     parser.add_argument('--r_fake', type=float, default=75.0, help="r_fake for isolate loss")
     parser.add_argument('--alpha', type=float, default=20, help="scale factor for amsoftmax and ocsoftmax loss")

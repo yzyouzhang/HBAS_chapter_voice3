@@ -29,7 +29,7 @@ def init():
                         required=True, default='ASVspoof2019LA',
                         choices=["ASVspoof2019LA", "ASVspoof2015", "VCC2020", "ASVspoof2019LASim"])
     parser.add_argument('-l', '--loss', type=str, default="ocsoftmax",
-                        choices=["softmax", "amsoftmax", "ocsoftmax", "isolate", "scl"],
+                        choices=["softmax", "amsoftmax", "ocsoftmax", "isolate", "scl", "angulariso"],
                         help="loss for scoring")
     parser.add_argument('--weight_loss', type=float, default=0.5, help="weight for other loss")
     parser.add_argument("--feat", type=str, help="which feature to use", default='LFCC',
@@ -87,6 +87,8 @@ def test_model_on_ASVspoof2019LA(feat_model_path, loss_model_path, part, add_los
             elif add_loss == "amsoftmax":
                 outputs, moutputs = loss_model(feats, labels)
                 score = F.softmax(outputs, dim=1)[:, 0]
+            elif add_loss == "angulariso":
+                angularisoloss, score = loss_model(feats, labels)
             else:
                 raise ValueError("what is the loss?")
 
