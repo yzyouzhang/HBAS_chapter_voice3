@@ -116,9 +116,8 @@ def test_on_VCC(feat_model_path, loss_model_path, part, add_loss):
         dir_path = dirname(feat_model_path)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = torch.load(feat_model_path)
-    # model = torch.nn.DataParallel(model, list(range(torch.cuda.device_count())))  # for multiple GPUs
     loss_model = torch.load(loss_model_path) if add_loss is not None else None
-    test_set_VCC = VCC2020("/data2/neil/VCC2020/", "LFCC", feat_len=args.feat_len, padding="repeat")
+    test_set_VCC = VCC2020("/data2/neil/VCC2020/", "LFCC", feat_len=args.feat_len)
     testDataLoader = DataLoader(test_set_VCC, batch_size=args.batch_size, shuffle=False, num_workers=0)
     model.eval()
     score_loader, idx_loader = [], []
@@ -135,14 +134,23 @@ def test_on_VCC(feat_model_path, loss_model_path, part, add_loss):
 
             feats, feat_outputs = model(feat)
 
-            score = F.softmax(feat_outputs)[:, 0]
-
-            if add_loss == "ocsoftmax":
+            if add_loss == "softmax":
+                score = F.softmax(feat_outputs)[:, 0]
+            elif add_loss == "ocsoftmax":
                 ang_isoloss, score = loss_model(feats, labels)
+            elif add_loss == "isolate":
+                _, score = loss_model(feats, labels)
+            elif add_loss == "scl":
+                score_softmax = F.softmax(feat_outputs)[:, 0]
+                _, score_scl = loss_model(feats, labels)
+                score = score_softmax + args.weight_loss * score_scl
             elif add_loss == "amsoftmax":
                 outputs, moutputs = loss_model(feats, labels)
                 score = F.softmax(outputs, dim=1)[:, 0]
-            else: pass
+            elif add_loss == "angulariso":
+                angularisoloss, score = loss_model(feats, labels)
+            else:
+                raise ValueError("what is the loss?")
 
             for j in range(labels.size(0)):
                 cm_score_file.write(
@@ -168,9 +176,8 @@ def test_on_ASVspoof2015(feat_model_path, loss_model_path, part, add_loss):
         dir_path = dirname(feat_model_path)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = torch.load(feat_model_path)
-    # model = torch.nn.DataParallel(model, list(range(torch.cuda.device_count())))  # for multiple GPUs
     loss_model = torch.load(loss_model_path) if add_loss is not None else None
-    test_set_2015 = ASVspoof2015("/data2/neil/ASVspoof2015/", part="eval", feature="LFCC", feat_len=args.feat_len, padding="repeat")
+    test_set_2015 = ASVspoof2015("/data2/neil/ASVspoof2015/", part="eval", feature="LFCC", feat_len=args.feat_len)
     print(len(test_set_2015))
     testDataLoader = DataLoader(test_set_2015, batch_size=args.batch_size, shuffle=False, num_workers=0)
     model.eval()
@@ -187,15 +194,23 @@ def test_on_ASVspoof2015(feat_model_path, loss_model_path, part, add_loss):
 
             feats, feat_outputs = model(feat)
 
-            score = F.softmax(feat_outputs)[:, 0]
-            # print(score)
-
-            if add_loss == "ocsoftmax":
+            if add_loss == "softmax":
+                score = F.softmax(feat_outputs)[:, 0]
+            elif add_loss == "ocsoftmax":
                 ang_isoloss, score = loss_model(feats, labels)
+            elif add_loss == "isolate":
+                _, score = loss_model(feats, labels)
+            elif add_loss == "scl":
+                score_softmax = F.softmax(feat_outputs)[:, 0]
+                _, score_scl = loss_model(feats, labels)
+                score = score_softmax + args.weight_loss * score_scl
             elif add_loss == "amsoftmax":
                 outputs, moutputs = loss_model(feats, labels)
                 score = F.softmax(outputs, dim=1)[:, 0]
-            else: pass
+            elif add_loss == "angulariso":
+                angularisoloss, score = loss_model(feats, labels)
+            else:
+                raise ValueError("what is the loss?")
 
             for j in range(labels.size(0)):
                 cm_score_file.write(
@@ -248,8 +263,7 @@ def test_on_ASVspoof2019LASim(feat_model_path, loss_model_path, part, add_loss):
     test_set = ASVspoof2019LA_DeviceAdversarial(path_to_features="/data2/neil/ASVspoof2019LA/",
                                                 path_to_deviced="/dataNVME/neil/ASVspoof2019LADevice",
                                                 part="eval",
-                                                feature="LFCC", feat_len=args.feat_len,
-                                                padding="repeat")
+                                                feature="LFCC", feat_len=args.feat_len)
     testDataLoader = DataLoader(test_set, batch_size=args.batch_size, shuffle=False, num_workers=0)
     model.eval()
     score_loader, idx_loader = [], []
@@ -266,12 +280,23 @@ def test_on_ASVspoof2019LASim(feat_model_path, loss_model_path, part, add_loss):
             score = F.softmax(feat_outputs)[:, 0]
             # print(score)
 
-            if add_loss == "ocsoftmax":
+            if add_loss == "softmax":
+                score = F.softmax(feat_outputs)[:, 0]
+            elif add_loss == "ocsoftmax":
                 ang_isoloss, score = loss_model(feats, labels)
+            elif add_loss == "isolate":
+                _, score = loss_model(feats, labels)
+            elif add_loss == "scl":
+                score_softmax = F.softmax(feat_outputs)[:, 0]
+                _, score_scl = loss_model(feats, labels)
+                score = score_softmax + args.weight_loss * score_scl
             elif add_loss == "amsoftmax":
                 outputs, moutputs = loss_model(feats, labels)
                 score = F.softmax(outputs, dim=1)[:, 0]
-            else: pass
+            elif add_loss == "angulariso":
+                angularisoloss, score = loss_model(feats, labels)
+            else:
+                raise ValueError("what is the loss?")
 
             for j in range(labels.size(0)):
                 cm_score_file.write(
