@@ -191,7 +191,7 @@ def train(args):
     feat, _, _, _, _ = training_set[23]
     print("Feature shape", feat.shape)
 
-    criterion = nn.CrossEntropyLoss(weight=torch.FloatTensor([0.1, 0.9]).to(args.device))
+    criterion = nn.CrossEntropyLoss().to(args.device)
 
     if args.loss == "ocsoftmax":
         ocsoftmax = OCSoftmax(args.enc_dim, m_real=args.m_real, m_fake=args.m_fake, alpha=args.alpha).to(args.device)
@@ -332,7 +332,7 @@ def train(args):
 
 
             # Train the classifier network
-            if (args.MT_AUG or args.ADV_AUG):
+            if args.MT_AUG or args.ADV_AUG:
                 channel = channel.to(args.device)
                 feats, _ = feat_model(feat)
                 feats = feats.detach()

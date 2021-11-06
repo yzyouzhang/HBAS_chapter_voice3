@@ -234,8 +234,6 @@ def test_individual_attacks(cm_score_file):
     cm_keys = cm_data[:, 2]
     cm_scores = cm_data[:, 3].astype(np.float)
 
-    other_cm_scores = -cm_scores
-
     eer_cm_lst, min_tDCF_lst = [], []
     for attack_idx in range(0, 55):
         # Extract target, nontarget, and spoof scores from the ASV scores
@@ -270,15 +268,13 @@ def test_on_ASVspoof2019LASim(feat_model_path, loss_model_path, part, add_loss):
 
     with open(os.path.join(dir_path, 'checkpoint_cm_score.txt'), 'w') as cm_score_file:
         for i, (feat, audio_fn, tags, labels, _) in enumerate(tqdm(testDataLoader)):
+            if i > int(len(test_set) / args.batch_size / (len(test_set.devices) + 1)): break
             feat = feat.transpose(2,3).to(device)
             # print(feat.shape)
             tags = tags.to(device)
             labels = labels.to(device)
 
             feats, feat_outputs = model(feat)
-
-            score = F.softmax(feat_outputs)[:, 0]
-            # print(score)
 
             if add_loss == "softmax":
                 score = F.softmax(feat_outputs)[:, 0]
