@@ -63,7 +63,7 @@ class ASVspoof2019LA(Dataset):
             if this_feat_len > self.feat_len:
                 startp = np.random.randint(this_feat_len - self.feat_len)
                 featureTensor = featureTensor[:, startp:startp + self.feat_len]
-            if this_feat_len < self.feat_len:
+            elif this_feat_len < self.feat_len:
                 featureTensor = repeat_padding_RawTensor(featureTensor, self.feat_len)
 
         tag = self.tag[all_info[4]]
@@ -103,7 +103,7 @@ class VCC2020(Dataset):
         if this_feat_len > self.feat_len:
             startp = np.random.randint(this_feat_len - self.feat_len)
             featureTensor = featureTensor[:, startp:startp + self.feat_len, :]
-        if this_feat_len < self.feat_len:
+        elif this_feat_len < self.feat_len:
             featureTensor = repeat_padding_Tensor(featureTensor, self.feat_len)
         tag = self.tag[all_info[-2]]
         label = self.label[all_info[-1]]
@@ -114,8 +114,7 @@ class VCC2020(Dataset):
 
 
 class ASVspoof2015(Dataset):
-    def __init__(self, path_to_features, part='train', feature='LFCC', feat_len=750,
-                 genuine_only=False):
+    def __init__(self, path_to_features, part='train', feature='LFCC', feat_len=750):
         super(ASVspoof2015, self).__init__()
         self.path_to_features = path_to_features
         self.part = part
@@ -139,7 +138,7 @@ class ASVspoof2015(Dataset):
         if this_feat_len > self.feat_len:
             startp = np.random.randint(this_feat_len - self.feat_len)
             featureTensor = featureTensor[:, startp:startp + self.feat_len, :]
-        if this_feat_len < self.feat_len:
+        elif this_feat_len < self.feat_len:
             featureTensor = repeat_padding_Tensor(featureTensor, self.feat_len)
         filename =  all_info[1]
         tag = self.tag[all_info[-2]]
@@ -186,20 +185,67 @@ class ASVspoof2019LASim(Dataset):
             filepath = self.original_all_files[filename_idx]
         else:
             filepath = self.deviced_all_files[device_idx-1][filename_idx]
+
         basename = os.path.basename(filepath)
         all_info = basename.split(".")[0].split("_")
+
+        if self.feature != "Raw":
+            featureTensor = torch.load(filepath)
+            this_feat_len = featureTensor.shape[1]
+            if this_feat_len > self.feat_len:
+                startp = np.random.randint(this_feat_len - self.feat_len)
+                featureTensor = featureTensor[:, startp:startp + self.feat_len, :]
+            elif this_feat_len < self.feat_len:
+                featureTensor = repeat_padding_Tensor(featureTensor, self.feat_len)
+        else:
+            # file_path = os.path.join(self.path_to_audio, "LA/ASVspoof2019_LA_" + self.part, "flac", filename+".flac")
+            # featureTensor, sr = torchaudio.load(file_path)
+            featureTensor = torch.load(filepath)
+            this_feat_len = featureTensor.shape[1]
+            if this_feat_len > self.feat_len:
+                startp = np.random.randint(this_feat_len - self.feat_len)
+                featureTensor = featureTensor[:, startp:startp + self.feat_len]
+            elif this_feat_len < self.feat_len:
+                featureTensor = repeat_padding_RawTensor(featureTensor, self.feat_len)
+
+        filename = "_".join(all_info[1:4])
+        tag = self.tag[all_info[4]]
+        label = self.label[all_info[5]]
+        return featureTensor, filename, tag, label, device_idx
+
+    def collate_fn(self, samples):
+        return default_collate(samples)
+
+
+class ASVspoof2021LAeval(Dataset):
+    def __init__(self, path_to_features="/dataNVME/neil/ASVspoof2021LAFeatures",
+                 feature='LFCC', feat_len=500):
+        super(ASVspoof2021LAeval, self).__init__()
+        self.path_to_features = path_to_features
+        self.ptf = path_to_features
+        self.feat_len = feat_len
+        self.feature = feature
+        self.all_files = librosa.util.find_files(os.path.join(self.ptf, self.feature), ext="pt")
+
+    def __len__(self):
+        return len(self.all_files)
+
+    def __getitem__(self, idx):
+        filepath = self.all_files[idx]
+        basename = os.path.basename(filepath)
+        all_info = basename.split(".")[0].split("_")
+        assert len(all_info) == 4
         featureTensor = torch.load(filepath)
         this_feat_len = featureTensor.shape[1]
 
         if this_feat_len > self.feat_len:
             startp = np.random.randint(this_feat_len - self.feat_len)
             featureTensor = featureTensor[:, startp:startp + self.feat_len, :]
-        if this_feat_len < self.feat_len:
+        elif this_feat_len < self.feat_len:
             featureTensor = repeat_padding_Tensor(featureTensor, self.feat_len)
-        filename = "_".join(all_info[1:4])
-        tag = self.tag[all_info[4]]
-        label = self.label[all_info[5]]
-        return featureTensor, filename, tag, label, device_idx
+
+        filename =  "_".join(all_info[1:])
+        return featureTensor, filename
 
     def collate_fn(self, samples):
         return default_collate(samples)
