@@ -74,7 +74,11 @@ def initParams():
     parser.add_argument('--lambda_', type=float, default=0.05, help="lambda for gradient reversal layer")
     parser.add_argument('--lr_d', type=float, default=0.0001, help="learning rate")
 
-    parser.add_argument('--pre_train', action='store_true', help="whether to pretrain the model")
+    parser.add_argument('--device_aug', type=str2bool, nargs='?', const=True, default=False,
+                        help="whether to use device_augmentation in training")
+    parser.add_argument('--transm_aug', type=str2bool, nargs='?', const=True, default=False,
+                        help="whether to use transmission_augmentation in training")
+
     parser.add_argument('--test_on_eval', action='store_true',
                         help="whether to run EER on the evaluation set")
     parser.add_argument('--test_interval', type=int, default=5, help="test on eval for every how many epochs")
@@ -127,6 +131,13 @@ def initParams():
     print('Cuda device available: ', args.cuda)
     args.device = torch.device("cuda" if args.cuda else "cpu")
 
+    if any([args.AUG, args.MT_AUG, args.ADV_AUG]):
+        assert any([args.device_aug, args.transm_aug])
+    if any([args.device_aug, args.transm_aug]):
+        assert any([args.AUG, args.MT_AUG, args.ADV_AUG])
+
+    assert [args.AUG, args.MT_AUG, args.ADV_AUG].count(True) == 1
+
     return args
 
 def adjust_learning_rate(args, lr, optimizer, epoch_num):
@@ -164,22 +175,34 @@ def train(args):
     feat_optimizer = torch.optim.Adam(feat_model.parameters(), lr=args.lr,
                                       betas=(args.beta_1, args.beta_2), eps=args.eps, weight_decay=0.0005)
 
-    training_set = ASVspoof2019LA(args.path_to_database, args.path_to_features, 'train',
-                                args.feat, feat_len=args.feat_len)
-    validation_set = ASVspoof2019LA(args.path_to_database, args.path_to_features, 'dev',
-                                  args.feat, feat_len=args.feat_len)
-    if args.AUG or args.MT_AUG or args.ADV_AUG:
+
+    if args.device_aug:
         training_set = ASVspoof2019LASim(path_to_features="/data2/neil/ASVspoof2019LA/",
                                                         path_to_deviced="/dataNVME/neil/ASVspoof2019LADevice",
-                                                        part="train",
-                                                        feature=args.feat, feat_len=args.feat_len)
+                                                        part="train", feature=args.feat, feat_len=args.feat_len)
         validation_set = ASVspoof2019LASim(path_to_features="/data2/neil/ASVspoof2019LA/",
                                                           path_to_deviced="/dataNVME/neil/ASVspoof2019LADevice",
-                                                          part="dev",
-                                                          feature=args.feat, feat_len=args.feat_len)
-    if args.MT_AUG or args.ADV_AUG:
-        classifier = ChannelClassifier(args.enc_dim, len(training_set.devices)+1, args.lambda_, ADV=args.ADV_AUG).to(args.device)
-        classifier_optimizer = torch.optim.Adam(classifier.parameters(), lr=args.lr_d,
+                                                          part="dev", feature=args.feat, feat_len=args.feat_len)
+    elif args.transm_aug:
+        training_set = ASVspoof2019Transm_aug(part="train", feature=args.feat, feat_len=args.feat_len)
+        validation_set = ASVspoof2019Transm_aug(part="dev", feature=args.feat, feat_len=args.feat_len)
+    else:
+        training_set = ASVspoof2019LA(args.path_to_database, args.path_to_features, 'train',
+                                      args.feat, feat_len=args.feat_len)
+        validation_set = ASVspoof2019LA(args.path_to_database, args.path_to_features, 'dev',
+                                        args.feat, feat_len=args.feat_len)
+    if args.transm_aug and args.device_aug:
+        training_set = ASVspoof2019TransmDevice_aug(part="train", feature=args.feat, feat_len=args.feat_len)
+        validation_set = ASVspoof2019TransmDevice_aug(part="dev", feature=args.feat, feat_len=args.feat_len)
+
+    if not args.AUG:
+        if args.device_aug:
+            classifier1 = ChannelClassifier(args.enc_dim, len(training_set.devices)+1, args.lambda_, ADV=args.ADV_AUG).to(args.device)
+            classifier1_optimizer = torch.optim.Adam(classifier1.parameters(), lr=args.lr_d,
+                                                betas=(args.beta_1, args.beta_2), eps=args.eps, weight_decay=0.0005)
+        if args.transm_aug:
+            classifier2 = ChannelClassifier(args.enc_dim, len(training_set.channel)+1, args.lambda_, ADV=args.ADV_AUG).to(args.device)
+            classifier2_optimizer = torch.optim.Adam(classifier2.parameters(), lr=args.lr_d,
                                                 betas=(args.beta_1, args.beta_2), eps=args.eps, weight_decay=0.0005)
 
     trainDataLoader = DataLoader(training_set, batch_size=args.batch_size,
@@ -241,13 +264,27 @@ def train(args):
             adjust_learning_rate(args, args.lr, angulariso_optimizer, epoch_num)
         adjust_lambda_(args, epoch_num)
         if args.MT_AUG or args.ADV_AUG:
-            adjust_learning_rate(args, args.lr_d, classifier_optimizer, epoch_num)
+            if args.device_aug and args.transm_aug:
+                adjust_learning_rate(args, args.lr_d, classifier1_optimizer, epoch_num)
+                adjust_learning_rate(args, args.lr_d, classifier2_optimizer, epoch_num)
+            else:
+                if args.device_aug:
+                    adjust_learning_rate(args, args.lr_d, classifier1_optimizer, epoch_num)
+                else:
+                    adjust_learning_rate(args, args.lr_d, classifier2_optimizer, epoch_num)
         print('\nEpoch: %d ' % (epoch_num + 1))
         correct_m, total_m, correct_c, total_c, correct_v, total_v = 0, 0, 0, 0, 0, 0
 
         for i, (feat, audio_fn, tags, labels, channel) in enumerate(tqdm(trainDataLoader)):
             if args.AUG or args.MT_AUG or args.ADV_AUG:
-                if i > int(len(training_set) / args.batch_size / (len(training_set.devices) + 1)): break
+                if args.device_aug and args.transm_aug:
+                    shrink_size = 20 + 1 + 1
+                else:
+                    if args.transm_aug:
+                        shrink_size = 20 + 1
+                    else:
+                        shrink_size = len(training_set.devices) + 1
+                if i > int(len(training_set) / args.batch_size / shrink_size): break
             ## data prep
             if args.feat == "Raw":
                 feat = feat.to(args.device)
@@ -281,14 +318,33 @@ def train(args):
 
 
             if epoch_num > 0 and (args.MT_AUG or args.ADV_AUG):
-                channel = channel.to(args.device)
-                classifier_out = classifier(feats)
-                _, predicted = torch.max(classifier_out.data, 1)
-                total_m += channel.size(0)
-                correct_m += (predicted == channel).sum().item()
-                device_loss = criterion(classifier_out, channel)
-                feat_loss += device_loss
-                trainlossDict["adv_loss"].append(device_loss.item())
+                if args.device_aug and args.transm_aug:
+                    channel = channel.to(args.device)
+                    codec = channel[:, 0]
+                    devic = channel[:, 1]
+                    classifier1_out = classifier1(feats)
+                    classifier2_out = classifier2(feats)
+                    _, predicted = torch.max(classifier1_out.data, 1)
+                    total_m += channel.size(0)
+                    correct_m += (predicted == codec).sum().item()
+                    codec_loss = criterion(classifier1_out, codec)
+                    devic_loss = criterion(classifier2_out, devic)
+                    advaug_loss = codec_loss + devic_loss
+                    feat_loss += advaug_loss
+                    trainlossDict["adv_loss"].append(advaug_loss.item())
+                else:
+                    if args.device_aug:
+                        classifier = classifier1
+                    else:
+                        classifier = classifier2
+                    channel = channel.to(args.device)
+                    classifier_out = classifier(feats)
+                    _, predicted = torch.max(classifier_out.data, 1)
+                    total_m += channel.size(0)
+                    correct_m += (predicted == channel).sum().item()
+                    device_loss = criterion(classifier_out, channel)
+                    feat_loss += device_loss
+                    trainlossDict["adv_loss"].append(device_loss.item())
 
             ## backward
             if args.loss == "softmax":
@@ -337,16 +393,41 @@ def train(args):
             # Train the classifier network
             if args.MT_AUG or args.ADV_AUG:
                 channel = channel.to(args.device)
-                feats, _ = feat_model(feat)
-                feats = feats.detach()
-                classifier_out = classifier(feats)
-                _, predicted = torch.max(classifier_out.data, 1)
-                total_c += channel.size(0)
-                correct_c += (predicted == channel).sum().item()
-                device_loss_c = criterion(classifier_out, channel)
-                classifier_optimizer.zero_grad()
-                device_loss_c.backward()
-                classifier_optimizer.step()
+                if args.device_aug and args.transm_aug:
+                    codec = channel[:, 0]
+                    devic = channel[:, 1]
+                    feats, _ = feat_model(feat)
+                    feats = feats.detach()
+                    classifier1_out = classifier1(feats)
+                    classifier2_out = classifier2(feats)
+                    _, predicted = torch.max(classifier1_out.data, 1)
+                    total_c += channels.size(0)
+                    correct_c += (predicted == codec).sum().item()
+                    codec_loss_c = criterion(classifier1_out, codec)
+                    classifier1_optimizer.zero_grad()
+                    codec_loss_c.backward()
+                    classifier1_optimizer.step()
+                    devic_loss_c = criterion(classifier2_out, devic)
+                    classifier2_optimizer.zero_grad()
+                    devic_loss_c.backward()
+                    classifier2_optimizer.step()
+                else:
+                    if args.device_aug:
+                        classifier = classifier1
+                        classifier_optimizer = classifier1_optimizer
+                    else:
+                        classifier = classifier2
+                        classifier_optimizer = classifier2_optimizer
+                    feats, _ = feat_model(feat)
+                    feats = feats.detach()
+                    classifier_out = classifier(feats)
+                    _, predicted = torch.max(classifier_out.data, 1)
+                    total_c += channel.size(0)
+                    correct_c += (predicted == channel).sum().item()
+                    device_loss_c = criterion(classifier_out, channel)
+                    classifier_optimizer.zero_grad()
+                    device_loss_c.backward()
+                    classifier_optimizer.step()
 
             ## record
             ip1_loader.append(feats)
@@ -410,13 +491,32 @@ def train(args):
 
 
                 if epoch_num > 0 and (args.MT_AUG or args.ADV_AUG):
-                    channel = channel.to(args.device)
-                    classifier_out = classifier(feats)
-                    _, predicted = torch.max(classifier_out.data, 1)
-                    total_v += channel.size(0)
-                    correct_v += (predicted == channel).sum().item()
-                    device_loss = criterion(classifier_out, channel)
-                    devlossDict["adv_loss"].append(device_loss.item())
+                    if args.device_aug and args.transm_aug:
+                        channel = channel.to(args.device)
+                        codec = channel[:, 0]
+                        devic = channel[:, 1]
+                        classifier1_out = classifier1(feats)
+                        classifier2_out = classifier2(feats)
+                        _, predicted = torch.max(classifier1_out.data, 1)
+                        total_v += channel.size(0)
+                        correct_v += (predicted == codec).sum().item()
+                        codec_loss = criterion(classifier1_out, codec)
+                        devic_loss = criterion(classifier2_out, devic)
+                        advaug_loss = codec_loss + devic_loss
+                        feat_loss += advaug_loss
+                        devlossDict["adv_loss"].append(advaug_loss.item())
+                    else:
+                        if args.device_aug:
+                            classifier = classifier1
+                        else:
+                            classifier = classifier2
+                        channel = channel.to(args.device)
+                        classifier_out = classifier(feats)
+                        _, predicted = torch.max(classifier_out.data, 1)
+                        total_v += channel.size(0)
+                        correct_v += (predicted == channel).sum().item()
+                        device_loss = criterion(classifier_out, channel)
+                        devlossDict["adv_loss"].append(device_loss.item())
 
                 ip1_loader.append(feats)
                 idx_loader.append((labels))

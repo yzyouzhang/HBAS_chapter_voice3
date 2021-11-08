@@ -251,6 +251,147 @@ class ASVspoof2021LAeval(Dataset):
         return default_collate(samples)
 
 
+class ASVspoof2019Transm_aug(Dataset):
+    def __init__(self, path_to_ori="/data2/neil/ASVspoof2019LA/",
+                 path_to_augFeatures="/dataNVME/neil/ASVspoof2019LA_augFeatures",
+                 part="train", feature='LFCC', feat_len=500):
+        super(ASVspoof2019Transm_aug, self).__init__()
+        if feature == "Melspec":
+            path_to_augFeatures = "/data3/neil/ASVspoof2019LA_augFeatures"
+        self.path_to_features = path_to_augFeatures
+        self.part = part
+        self.ori = os.path.join(path_to_ori, part)
+        self.ptf = os.path.join(path_to_augFeatures, part)
+        self.feat_len = feat_len
+        self.feature = feature
+        self.ori_files = librosa.util.find_files(os.path.join(self.ori, self.feature), ext="pt")
+        self.all_files = librosa.util.find_files(os.path.join(self.ptf, self.feature), ext="pt")
+        self.tag = {"-": 0, "A01": 1, "A02": 2, "A03": 3, "A04": 4, "A05": 5, "A06": 6}
+        self.label = {"spoof": 1, "bonafide": 0}
+        self.channel = ['no_channel', 'amr[br=10k2,nodtx]', 'amr[br=5k9]', 'amr[br=6k7,nodtx]',
+                        'amr[br=7k95,nodtx]', 'amrwb[br=12k65]', 'amrwb[br=15k85]', 'g711[law=a]',
+                        'g711[law=u]', 'g722[br=64k]', 'g726[law=a,br=16k]', 'g726[law=a,br=24k]',
+                        'g726[law=u,40k]', 'g726[law=u,br=24k]', 'g726[law=u,br=32k]', 'g728',
+                        'silk[br=10k,loss=10]', 'silk[br=15k,loss=5]', 'silk[br=15k]',
+                        'silk[br=20k,loss=5]', 'silk[br=5k,loss=10]', 'silk[br=5k]', 'amr[br=12k2]',
+                        'amr[br=5k9,nodtx]', 'amrwb[br=6k6,nodtx]', 'g722[br=56k]', 'g726[law=a,br=32k]',
+                        'g726[law=a,br=40k]', 'silk[br=15k,loss=10]', 'silk[br=20k]',
+                        'silkwb[br=10k,loss=5]', 'amr[br=10k2]', 'amr[br=4k75]', 'amr[br=7k95]',
+                        'amrwb[br=15k85,nodtx]', 'amrwb[br=23k05]', 'g726[law=u,br=16k]', 'g729a',
+                        'gsmfr', 'silkwb[br=10k,loss=10]', 'silkwb[br=20k]', 'silkwb[br=30k,loss=10]',
+                        'amr[br=7k4,nodtx]', 'amrwb[br=6k6]', 'silk[br=10k]', 'silk[br=5k,loss=5]',
+                        'silkwb[br=30k,loss=5]', 'amr[br=4k75,nodtx]', 'amr[br=7k4]', 'g722[br=48k]',
+                        'silk[br=20k,loss=10]', 'silkwb[br=30k]', 'amr[br=5k15]',
+                        'silkwb[br=20k,loss=5]', 'amrwb[br=23k05,nodtx]', 'amrwb[br=12k65,nodtx]',
+                        'silkwb[br=20k,loss=10]', 'amr[br=6k7]', 'silkwb[br=10k]', 'silk[br=10k,loss=5]']
+        self.channel_dict = dict(zip(iter(self.channel), range(len(self.channel))))
+
+    def __len__(self):
+        return len(self.ori_files) + len(self.all_files)
+
+    def __getitem__(self, idx):
+        if idx < len(self.ori_files):
+            filepath = self.ori_files[idx]
+            basename = os.path.basename(filepath)
+            all_info = basename.split(".")[0].split("_")
+            assert len(all_info) == 6
+            channel = "no_channel"
+        else:
+            filepath = self.all_files[idx - len(self.ori_files)]
+            basename = os.path.basename(filepath)
+            all_info = basename.split(".")[0].split("_")
+            assert len(all_info) == 7
+            channel = all_info[6]
+        featureTensor = torch.load(filepath)
+        this_feat_len = featureTensor.shape[1]
+        if this_feat_len > self.feat_len:
+            startp = np.random.randint(this_feat_len - self.feat_len)
+            featureTensor = featureTensor[:, startp:startp + self.feat_len, :]
+        elif this_feat_len < self.feat_len:
+            featureTensor = repeat_padding_Tensor(featureTensor, self.feat_len)
+        filename = "_".join(all_info[1:4])
+        tag = self.tag[all_info[4]]
+        label = self.label[all_info[5]]
+        return featureTensor, filename, tag, label, self.channel_dict[channel]
+
+    def collate_fn(self, samples):
+        return default_collate(samples)
+
+
+class ASVspoof2019TransmDevice_aug(Dataset):
+    def __init__(self, path_to_ori="/data2/neil/ASVspoof2019LA/",
+                 path_to_augFeatures="/data3/neil/ASVspoof2019LAPA_augFeatures",
+                 part="train", feature='LFCC', feat_len=500):
+        super(ASVspoof2019TransmDevice_aug, self).__init__()
+        self.path_to_features = path_to_augFeatures
+        self.part = part
+        self.ori = os.path.join(path_to_ori, part)
+        self.ptf = os.path.join(path_to_augFeatures, part)
+        self.feat_len = feat_len
+        self.feature = feature
+        self.ori_files = librosa.util.find_files(os.path.join(self.ori, self.feature), ext="pt")
+        self.all_files = librosa.util.find_files(os.path.join(self.ptf, self.feature), ext="pt")
+        self.tag = {"-": 0, "A01": 1, "A02": 2, "A03": 3, "A04": 4, "A05": 5, "A06": 6}
+        self.label = {"spoof": 1, "bonafide": 0}
+        self.channel = ['no_channel', 'amr[br=10k2,nodtx]', 'amr[br=5k9]', 'amr[br=6k7,nodtx]',
+                        'amr[br=7k95,nodtx]', 'amrwb[br=12k65]', 'amrwb[br=15k85]', 'g711[law=a]',
+                        'g711[law=u]', 'g722[br=64k]', 'g726[law=a,br=16k]', 'g726[law=a,br=24k]',
+                        'g726[law=u,40k]', 'g726[law=u,br=24k]', 'g726[law=u,br=32k]', 'g728',
+                        'silk[br=10k,loss=10]', 'silk[br=15k,loss=5]', 'silk[br=15k]',
+                        'silk[br=20k,loss=5]', 'silk[br=5k,loss=10]', 'silk[br=5k]', 'amr[br=12k2]',
+                        'amr[br=5k9,nodtx]', 'amrwb[br=6k6,nodtx]', 'g722[br=56k]', 'g726[law=a,br=32k]',
+                        'g726[law=a,br=40k]', 'silk[br=15k,loss=10]', 'silk[br=20k]',
+                        'silkwb[br=10k,loss=5]', 'amr[br=10k2]', 'amr[br=4k75]', 'amr[br=7k95]',
+                        'amrwb[br=15k85,nodtx]', 'amrwb[br=23k05]', 'g726[law=u,br=16k]', 'g729a',
+                        'gsmfr', 'silkwb[br=10k,loss=10]', 'silkwb[br=20k]', 'silkwb[br=30k,loss=10]',
+                        'amr[br=7k4,nodtx]', 'amrwb[br=6k6]', 'silk[br=10k]', 'silk[br=5k,loss=5]',
+                        'silkwb[br=30k,loss=5]', 'amr[br=4k75,nodtx]', 'amr[br=7k4]', 'g722[br=48k]',
+                        'silk[br=20k,loss=10]', 'silkwb[br=30k]', 'amr[br=5k15]',
+                        'silkwb[br=20k,loss=5]', 'amrwb[br=23k05,nodtx]', 'amrwb[br=12k65,nodtx]',
+                        'silkwb[br=20k,loss=10]', 'amr[br=6k7]', 'silkwb[br=10k]', 'silk[br=10k,loss=5]']
+        self.channel_dict = dict(zip(iter(self.channel), range(len(self.channel))))
+        self.devices = ['OktavaML19-16000.ir', 'iPhoneirRecording-16000.ir', 'iPadirRecording-16000.ir',
+                        'ResloRB250-16000.ir', 'telephonehornT65C-16000.ir', 'ResloSR1-16000.ir', 'RCAPB90-16000.ir',
+                        'ResloRBRedLabel-16000.ir', 'telephone90sC-16000.ir', 'SonyC37Fet-16000.ir', 'Doremi-16000.ir',
+                        'BehritoneirRecording-16000.ir', ""]
+        self.device_dict = dict(zip(iter(self.devices), range(len(self.devices))))
+
+    def __len__(self):
+        return len(self.ori_files) + len(self.all_files)
+
+    def __getitem__(self, idx):
+        if idx < len(self.ori_files):
+            filepath = self.ori_files[idx]
+            basename = os.path.basename(filepath)
+            all_info = basename.split(".")[0].split("_")
+            assert len(all_info) == 6
+            channel = "no_channel"
+            device = ""
+        else:
+            filepath = self.all_files[idx - len(self.ori_files)]
+            basename = os.path.basename(filepath)
+            all_info = basename[:-3].split("_")
+            assert len(all_info) == 8
+            channel = all_info[6]
+            device = all_info[7]
+        featureTensor = torch.load(filepath)
+
+        this_feat_len = featureTensor.shape[1]
+        if this_feat_len > self.feat_len:
+            startp = np.random.randint(this_feat_len - self.feat_len)
+            featureTensor = featureTensor[:, startp:startp + self.feat_len, :]
+        elif this_feat_len < self.feat_len:
+            featureTensor = repeat_padding_Tensor(featureTensor, self.feat_len)
+
+        filename = "_".join(all_info[1:4])
+        tag = self.tag[all_info[4]]
+        label = self.label[all_info[5]]
+        return featureTensor, filename, tag, label, \
+               np.array([self.channel_dict[channel], self.device_dict[device]])
+
+    def collate_fn(self, samples):
+        return default_collate(samples)
+
 def repeat_padding_Tensor(spec, ref_len):
     mul = int(np.ceil(ref_len / spec.shape[1]))
     spec = spec.repeat(1, mul, 1)[:, :ref_len, :]
