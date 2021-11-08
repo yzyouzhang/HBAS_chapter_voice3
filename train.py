@@ -455,7 +455,14 @@ def train(args):
             ip1_loader, tag_loader, idx_loader, score_loader = [], [], [], []
             for i, (feat, audio_fn, tags, labels, channel) in enumerate(tqdm(valDataLoader)):
                 if args.AUG or args.MT_AUG or args.ADV_AUG:
-                    if i > int(len(validation_set) / args.batch_size / (len(validation_set.devices) + 1)): break
+                    if args.device_aug and args.transm_aug:
+                        shrink_size = 20 + 1 + 1
+                    else:
+                        if args.transm_aug:
+                            shrink_size = 20 + 1
+                        else:
+                            shrink_size = len(validation_set.devices) + 1
+                    if i > int(len(validation_set) / args.batch_size / shrink_size): break
                 if args.feat == "Raw":
                     feat = feat.to(args.device)
                 else:
