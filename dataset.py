@@ -150,10 +150,10 @@ class ASVspoof2015(Dataset):
         return default_collate(samples)
 
 
-class ASVspoof2019LA_DeviceAdversarial(Dataset):
+class ASVspoof2019LASim(Dataset):
     def __init__(self, path_to_features="/data2/neil/ASVspoof2019LA/", path_to_deviced="/dataNVME/neil/ASVspoof2019LADevice",
                  part="train", feature='LFCC', feat_len=750):
-        super(ASVspoof2019LA_DeviceAdversarial, self).__init__()
+        super(ASVspoof2019LASim, self).__init__()
         self.path_to_features = path_to_features
         suffix = {"train" : "", "dev":"Dev", "eval": "Eval"}
         self.path_to_deviced = path_to_deviced + suffix[part]

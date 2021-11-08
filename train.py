@@ -169,11 +169,11 @@ def train(args):
     validation_set = ASVspoof2019LA(args.path_to_database, args.path_to_features, 'dev',
                                   args.feat, feat_len=args.feat_len)
     if args.AUG or args.MT_AUG or args.ADV_AUG:
-        training_set = ASVspoof2019LA_DeviceAdversarial(path_to_features="/data2/neil/ASVspoof2019LA/",
+        training_set = ASVspoof2019LASim(path_to_features="/data2/neil/ASVspoof2019LA/",
                                                         path_to_deviced="/dataNVME/neil/ASVspoof2019LADevice",
                                                         part="train",
                                                         feature=args.feat, feat_len=args.feat_len)
-        validation_set = ASVspoof2019LA_DeviceAdversarial(path_to_features="/data2/neil/ASVspoof2019LA/",
+        validation_set = ASVspoof2019LASim(path_to_features="/data2/neil/ASVspoof2019LA/",
                                                           path_to_deviced="/dataNVME/neil/ASVspoof2019LADevice",
                                                           part="dev",
                                                           feature=args.feat, feat_len=args.feat_len)

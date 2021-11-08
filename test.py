@@ -252,7 +252,7 @@ def test_individual_attacks(cm_score_file):
 
 def test_on_ASVspoof2019LASim(feat_model_path, loss_model_path, part, add_loss):
     dirname = os.path.dirname
-    basename = os.path.splitext(os.path.basename(feat_model_path))[0]
+    # basename = os.path.splitext(os.path.basename(feat_model_path))[0]
     if "checkpoint" in dirname(feat_model_path):
         dir_path = dirname(dirname(feat_model_path))
     else:
@@ -260,13 +260,13 @@ def test_on_ASVspoof2019LASim(feat_model_path, loss_model_path, part, add_loss):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = torch.load(feat_model_path)
     loss_model = torch.load(loss_model_path) if add_loss is not None else None
-    test_set = ASVspoof2019LA_DeviceAdversarial(path_to_features="/data2/neil/ASVspoof2019LA/",
+    test_set = ASVspoof2019LASim(path_to_features="/data2/neil/ASVspoof2019LA/",
                                                 path_to_deviced="/dataNVME/neil/ASVspoof2019LADevice",
                                                 part="eval",
                                                 feature="LFCC", feat_len=args.feat_len)
     testDataLoader = DataLoader(test_set, batch_size=args.batch_size, shuffle=False, num_workers=0)
     model.eval()
-    score_loader, idx_loader = [], []
+    # score_loader, idx_loader = [], []
 
     with open(os.path.join(dir_path, 'checkpoint_cm_score_ASVspoof2019LASim.txt'), 'w') as cm_score_file:
         for i, (feat, audio_fn, tags, labels, _) in enumerate(tqdm(testDataLoader)):
@@ -298,18 +298,21 @@ def test_on_ASVspoof2019LASim(feat_model_path, loss_model_path, part, add_loss):
 
             for j in range(labels.size(0)):
                 cm_score_file.write(
-                    'A%02d %s %s\n' % (tags[j].data,
+                    '%s A%02d %s %s\n' % (audio_fn[j], tags[j].data,
                                           "spoof" if labels[j].data.cpu().numpy() else "bonafide",
                                           score[j].item()))
 
-            score_loader.append(score.detach().cpu())
-            idx_loader.append(labels.detach().cpu())
+    #         score_loader.append(score.detach().cpu())
+    #         idx_loader.append(labels.detach().cpu())
+    #
+    # scores = torch.cat(score_loader, 0).data.cpu().numpy()
+    # labels = torch.cat(idx_loader, 0).data.cpu().numpy()
+    # eer = em.compute_eer(scores[labels == 0], scores[labels == 1])[0]
 
-    scores = torch.cat(score_loader, 0).data.cpu().numpy()
-    labels = torch.cat(idx_loader, 0).data.cpu().numpy()
-    eer = em.compute_eer(scores[labels == 0], scores[labels == 1])[0]
+    eer, min_tDCF = compute_eer_and_tdcf(os.path.join(dir_path, 'checkpoint_cm_score_ASVspoof2019LASim.txt'),
+                                            "/data/neil/DS_10283_3336/")
 
-    return eer
+    return eer, min_tDCF
 
 
 if __name__ == "__main__":

@@ -31,8 +31,6 @@ def compute_eer_and_tdcf(cm_score_file, path_to_database, visualize=False):
     cm_keys = cm_data[:, 2]
     cm_scores = cm_data[:, 3].astype(np.float)
 
-    other_cm_scores = -cm_scores
-
     # Extract target, nontarget, and spoof scores from the ASV scores
     tar_asv = asv_scores[asv_keys == 'target']
     non_asv = asv_scores[asv_keys == 'nontarget']
