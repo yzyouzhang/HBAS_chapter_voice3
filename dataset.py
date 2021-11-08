@@ -134,7 +134,6 @@ class ASVspoof2015(Dataset):
         filepath = self.all_files[idx]
         basename = os.path.basename(filepath)
         all_info = basename.split(".")[0].split("_")
-        assert len(all_info) == 4
         featureTensor = torch.load(filepath)
         this_feat_len = featureTensor.shape[1]
         if this_feat_len > self.feat_len:

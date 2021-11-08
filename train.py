@@ -134,6 +134,9 @@ def adjust_learning_rate(args, lr, optimizer, epoch_num):
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr
 
+def adjust_lambda_(args, epoch_num):
+    args.lambda_ = 2 / (1 + np.exp(- 0.001 * epoch_num)) - 1
+
 def shuffle(feat, tags, labels):
     shuffle_index = torch.randperm(labels.shape[0])
     feat = feat[shuffle_index]
@@ -236,7 +239,7 @@ def train(args):
             adjust_learning_rate(args, args.lr, amsoftmax_optimizer, epoch_num)
         elif args.loss == "angulariso":
             adjust_learning_rate(args, args.lr, angulariso_optimizer, epoch_num)
-
+        adjust_lambda_(args, epoch_num)
         if args.MT_AUG or args.ADV_AUG:
             adjust_learning_rate(args, args.lr_d, classifier_optimizer, epoch_num)
         print('\nEpoch: %d ' % (epoch_num + 1))
