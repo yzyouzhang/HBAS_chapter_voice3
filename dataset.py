@@ -166,21 +166,21 @@ class ASVspoof2019LASim(Dataset):
         self.label = {"spoof": 1, "bonafide": 0}
         self.devices = ['AKSPKRS80sUk002-16000', 'AKSPKRSVinUk002-16000', 'Doremi-16000', 'RCAPB90-16000',
                         'ResloRBRedLabel-16000', 'AKSPKRSSpeaker002-16000', 'BehritoneirRecording-16000',
-                        'OktavaML19-16000', 'ResloRB250-16000', 'SonyC37Fet-16000']
+                        'OktavaML19-16000', 'ResloRB250-16000', 'SonyC37Fet-16000', ""]
         if part == "eval":
             self.devices = ['AKSPKRS80sUk002-16000', 'AKSPKRSVinUk002-16000', 'Doremi-16000', 'RCAPB90-16000',
                             'ResloRBRedLabel-16000', 'AKSPKRSSpeaker002-16000', 'BehritoneirRecording-16000',
                             'OktavaML19-16000', 'ResloRB250-16000', 'SonyC37Fet-16000',
-                            'iPadirRecording-16000', 'iPhoneirRecording-16000']
+                            'iPadirRecording-16000', 'iPhoneirRecording-16000', ""]
         self.original_all_files = librosa.util.find_files(os.path.join(self.ptf, self.feature), ext="pt")
         self.deviced_all_files = [librosa.util.find_files(os.path.join(self.path_to_deviced, devicex), ext="pt") for devicex in self.devices]
 
     def __len__(self):
-        return len(self.original_all_files) * (len(self.devices) + 1)
+        return len(self.original_all_files) * len(self.devices)
 
     def __getitem__(self, idx):
-        device_idx = idx % (len(self.devices) + 1)
-        filename_idx = idx // (len(self.devices) + 1)
+        device_idx = idx % len(self.devices)
+        filename_idx = idx // len(self.devices)
         if device_idx == 0:
             filepath = self.original_all_files[filename_idx]
         else:

@@ -146,7 +146,7 @@ def adjust_learning_rate(args, lr, optimizer, epoch_num):
         param_group['lr'] = lr
 
 def adjust_lambda_(args, epoch_num):
-    args.lambda_ = 2 / (1 + np.exp(- 0.001 * epoch_num)) - 1
+    args.lambda_ = 2 / (1 + np.exp(- 0.001 * epoch_num)) - 1 + 1e-9
 
 def shuffle(feat, tags, labels):
     shuffle_index = torch.randperm(labels.shape[0])
@@ -197,11 +197,11 @@ def train(args):
 
     if not args.AUG:
         if args.device_aug:
-            classifier1 = ChannelClassifier(args.enc_dim, len(training_set.devices)+1, args.lambda_, ADV=args.ADV_AUG).to(args.device)
+            classifier1 = ChannelClassifier(args.enc_dim, len(training_set.devices), args.lambda_, ADV=args.ADV_AUG).to(args.device)
             classifier1_optimizer = torch.optim.Adam(classifier1.parameters(), lr=args.lr_d,
                                                 betas=(args.beta_1, args.beta_2), eps=args.eps, weight_decay=0.0005)
         if args.transm_aug:
-            classifier2 = ChannelClassifier(args.enc_dim, len(training_set.channel)+1, args.lambda_, ADV=args.ADV_AUG).to(args.device)
+            classifier2 = ChannelClassifier(args.enc_dim, len(training_set.channel), args.lambda_, ADV=args.ADV_AUG).to(args.device)
             classifier2_optimizer = torch.optim.Adam(classifier2.parameters(), lr=args.lr_d,
                                                 betas=(args.beta_1, args.beta_2), eps=args.eps, weight_decay=0.0005)
 
@@ -401,7 +401,7 @@ def train(args):
                     classifier1_out = classifier1(feats)
                     classifier2_out = classifier2(feats)
                     _, predicted = torch.max(classifier1_out.data, 1)
-                    total_c += channels.size(0)
+                    total_c += channel.size(0)
                     correct_c += (predicted == codec).sum().item()
                     codec_loss_c = criterion(classifier1_out, codec)
                     classifier1_optimizer.zero_grad()
@@ -507,8 +507,8 @@ def train(args):
                         _, predicted = torch.max(classifier1_out.data, 1)
                         total_v += channel.size(0)
                         correct_v += (predicted == codec).sum().item()
-                        codec_loss = criterion(classifier1_out, codec)
-                        devic_loss = criterion(classifier2_out, devic)
+                        codec_loss = criterion1(classifier1_out, codec)
+                        devic_loss = criterion2(classifier2_out, devic)
                         advaug_loss = codec_loss + devic_loss
                         feat_loss += advaug_loss
                         devlossDict["adv_loss"].append(advaug_loss.item())
