@@ -62,7 +62,6 @@ def initParams():
     parser.add_argument('--alpha', type=float, default=20, help="scale factor for amsoftmax and ocsoftmax loss")
     parser.add_argument('--scale_factor', type=float, default=0.5, help="scale factor for single center loss")
 
-    parser.add_argument('--test_only', action='store_true', help="test the trained model in case the test crash sometimes or another test method")
     parser.add_argument('--continue_training', action='store_true', help="continue training with trained model")
 
     parser.add_argument('--AUG', type=str2bool, nargs='?', const=True, default=False,
@@ -95,7 +94,7 @@ def initParams():
     if any([args.feat == "Raw", args.model == "rawnet", args.feat_len > 16000]):
         assert all([args.feat == "Raw", args.model == "rawnet", args.feat_len > 16000])
 
-    if args.test_only or args.continue_training:
+    if args.continue_training:
         pass
     else:
         # Path for output data
@@ -322,13 +321,13 @@ def train(args):
                     channel = channel.to(args.device)
                     codec = channel[:, 0]
                     devic = channel[:, 1]
-                    classifier1_out = classifier1(feats)
                     classifier2_out = classifier2(feats)
-                    _, predicted = torch.max(classifier1_out.data, 1)
+                    classifier1_out = classifier1(feats)
+                    _, predicted = torch.max(classifier2_out.data, 1)
                     total_m += channel.size(0)
                     correct_m += (predicted == codec).sum().item()
-                    codec_loss = criterion(classifier1_out, codec)
-                    devic_loss = criterion(classifier2_out, devic)
+                    codec_loss = criterion(classifier2_out, codec)
+                    devic_loss = criterion(classifier1_out, devic)
                     advaug_loss = codec_loss + devic_loss
                     feat_loss += advaug_loss
                     trainlossDict["adv_loss"].append(advaug_loss.item())
@@ -398,19 +397,19 @@ def train(args):
                     devic = channel[:, 1]
                     feats, _ = feat_model(feat)
                     feats = feats.detach()
-                    classifier1_out = classifier1(feats)
                     classifier2_out = classifier2(feats)
-                    _, predicted = torch.max(classifier1_out.data, 1)
+                    classifier1_out = classifier1(feats)
+                    _, predicted = torch.max(classifier2_out.data, 1)
                     total_c += channel.size(0)
                     correct_c += (predicted == codec).sum().item()
-                    codec_loss_c = criterion(classifier1_out, codec)
-                    classifier1_optimizer.zero_grad()
-                    codec_loss_c.backward()
-                    classifier1_optimizer.step()
-                    devic_loss_c = criterion(classifier2_out, devic)
+                    codec_loss_c = criterion(classifier2_out, codec)
                     classifier2_optimizer.zero_grad()
-                    devic_loss_c.backward()
+                    codec_loss_c.backward()
                     classifier2_optimizer.step()
+                    devic_loss_c = criterion(classifier1_out, devic)
+                    classifier1_optimizer.zero_grad()
+                    devic_loss_c.backward()
+                    classifier1_optimizer.step()
                 else:
                     if args.device_aug:
                         classifier = classifier1
@@ -502,13 +501,13 @@ def train(args):
                         channel = channel.to(args.device)
                         codec = channel[:, 0]
                         devic = channel[:, 1]
-                        classifier1_out = classifier1(feats)
                         classifier2_out = classifier2(feats)
-                        _, predicted = torch.max(classifier1_out.data, 1)
+                        classifier1_out = classifier1(feats)
+                        _, predicted = torch.max(classifier2_out.data, 1)
                         total_v += channel.size(0)
                         correct_v += (predicted == codec).sum().item()
-                        codec_loss = criterion1(classifier1_out, codec)
-                        devic_loss = criterion2(classifier2_out, devic)
+                        codec_loss = criterion(classifier2_out, codec)
+                        devic_loss = criterion(classifier1_out, devic)
                         advaug_loss = codec_loss + devic_loss
                         feat_loss += advaug_loss
                         devlossDict["adv_loss"].append(advaug_loss.item())
@@ -649,26 +648,8 @@ def train(args):
                 res_file.write('\nTrained Epochs: %d\n' % (epoch_num - 49))
             break
 
-    return feat_model, loss_model
-
 
 if __name__ == "__main__":
     args = initParams()
-    if not args.test_only:
-        _, _ = train(args)
-    # model = torch.load(os.path.join(args.out_fold, 'anti-spoofing_feat_model.pt'))
-    # loss_model = torch.load(os.path.join(args.out_fold, 'anti-spoofing_loss_model.pt'))
-    # # TReer_cm, TRmin_tDCF = test(args, model, loss_model, "train")
-    # # VAeer_cm, VAmin_tDCF = test(args, model, loss_model, "dev")
-    # TEeer_cm, TEmin_tDCF = test(args, model, loss_model)
-    # with open(os.path.join(args.out_fold, 'args.json'), 'a') as res_file:
-    #     # res_file.write('\nTrain EER: %8.5f min-tDCF: %8.5f\n' % (TReer_cm, TRmin_tDCF))
-    #     # res_file.write('\nVal EER: %8.5f min-tDCF: %8.5f\n' % (VAeer_cm, VAmin_tDCF))
-    #     res_file.write('\nTest EER: %8.5f min-tDCF: %8.5f\n' % (TEeer_cm, TEmin_tDCF))
+    train(args)
 
-
-    # # Test a checkpoint model
-    # args = initParams()
-    # model = torch.load(os.path.join(args.out_fold, 'checkpoint', 'anti-spoofing_feat_model_19.pt'))
-    # loss_model = torch.load(os.path.join(args.out_fold, 'checkpoint', 'anti-spoofing_loss_model_19.pt'))
-    # VAeer_cm, VAmin_tDCF = test(args, model, loss_model, "dev")

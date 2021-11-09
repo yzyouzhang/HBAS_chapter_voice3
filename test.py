@@ -378,13 +378,15 @@ if __name__ == "__main__":
         eer = test_model_on_ASVspoof2019LA(model_path, loss_model_path, "eval", args.loss)
     elif args.task == "ASVspoof2015":
         eer = test_on_ASVspoof2015(model_path, loss_model_path, "eval", args.loss)
+        print(eer)
     elif args.task =="VCC2020":
         eer = test_on_VCC(model_path, loss_model_path, "eval", args.loss)
+        print(eer)
     elif args.task =="ASVspoof2019LASim":
         eer = test_on_ASVspoof2019LASim(model_path, loss_model_path, "eval", args.loss)
     elif args.task == "ASVspoof2021LA":
         eer = test_on_ASVspoof2021LA(model_path, loss_model_path, "eval", args.loss)
     else:
         raise ValueError("Evaluation task unknown!")
-    print(eer)
+
 
