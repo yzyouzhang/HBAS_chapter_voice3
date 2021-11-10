@@ -135,7 +135,7 @@ def initParams():
     if any([args.device_aug, args.transm_aug]):
         assert any([args.AUG, args.MT_AUG, args.ADV_AUG])
 
-    assert [args.AUG, args.MT_AUG, args.ADV_AUG].count(True) == 1
+    assert [args.AUG, args.MT_AUG, args.ADV_AUG].count(True) in [1, 0]
 
     return args
 
@@ -277,7 +277,7 @@ def train(args):
         for i, (feat, audio_fn, tags, labels, channel) in enumerate(tqdm(trainDataLoader)):
             if args.AUG or args.MT_AUG or args.ADV_AUG:
                 if args.device_aug and args.transm_aug:
-                    shrink_size = 20 + 1 + 1
+                    shrink_size = 20 + 1
                 else:
                     if args.transm_aug:
                         shrink_size = 20 + 1
@@ -455,7 +455,7 @@ def train(args):
             for i, (feat, audio_fn, tags, labels, channel) in enumerate(tqdm(valDataLoader)):
                 if args.AUG or args.MT_AUG or args.ADV_AUG:
                     if args.device_aug and args.transm_aug:
-                        shrink_size = 20 + 1 + 1
+                        shrink_size = 20 + 1
                     else:
                         if args.transm_aug:
                             shrink_size = 20 + 1

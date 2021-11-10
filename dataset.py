@@ -150,12 +150,15 @@ class ASVspoof2015(Dataset):
 
 
 class ASVspoof2019LASim(Dataset):
-    def __init__(self, path_to_features="/data2/neil/ASVspoof2019LA/", path_to_deviced="/dataNVME/neil/ASVspoof2019LADevice",
+    def __init__(self, path_to_features="/data2/neil/ASVspoof2019LA/",
+                 path_to_devicedaudio="/data/shared/ASVspoof2019LA-Sim",
+                 path_to_deviced="/dataNVME/neil/ASVspoof2019LADevice",
                  part="train", feature='LFCC', feat_len=750):
         super(ASVspoof2019LASim, self).__init__()
         self.path_to_features = path_to_features
         suffix = {"train" : "", "dev":"Dev", "eval": "Eval"}
         self.path_to_deviced = path_to_deviced + suffix[part]
+        self.path_to_devicedaudio = os.path.join(path_to_devicedaudio, part)
         self.path_to_features = path_to_features
         self.ptf = os.path.join(path_to_features, part)
         self.feat_len = feat_len
@@ -188,6 +191,7 @@ class ASVspoof2019LASim(Dataset):
 
         basename = os.path.basename(filepath)
         all_info = basename.split(".")[0].split("_")
+        filename = "_".join(all_info[1:4])
 
         if self.feature != "Raw":
             featureTensor = torch.load(filepath)
@@ -198,9 +202,12 @@ class ASVspoof2019LASim(Dataset):
             elif this_feat_len < self.feat_len:
                 featureTensor = repeat_padding_Tensor(featureTensor, self.feat_len)
         else:
-            # file_path = os.path.join(self.path_to_audio, "LA/ASVspoof2019_LA_" + self.part, "flac", filename+".flac")
-            # featureTensor, sr = torchaudio.load(file_path)
-            featureTensor = torch.load(filepath)
+            if device_idx == 0:
+                featureTensor = torch.load(filepath)
+            else:
+                device_name = self.devices[device_idx-1]
+                file_path = os.path.join(self.path_to_devicedaudio, device_name, filename+".wav")
+                featureTensor, sr = torchaudio.load(file_path)
             this_feat_len = featureTensor.shape[1]
             if this_feat_len > self.feat_len:
                 startp = np.random.randint(this_feat_len - self.feat_len)
@@ -208,7 +215,6 @@ class ASVspoof2019LASim(Dataset):
             elif this_feat_len < self.feat_len:
                 featureTensor = repeat_padding_RawTensor(featureTensor, self.feat_len)
 
-        filename = "_".join(all_info[1:4])
         tag = self.tag[all_info[4]]
         label = self.label[all_info[5]]
         return featureTensor, filename, tag, label, device_idx
