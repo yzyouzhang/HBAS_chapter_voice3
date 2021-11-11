@@ -263,15 +263,18 @@ def test_on_ASVspoof2019LASim(feat_model_path, loss_model_path, part, add_loss):
     test_set = ASVspoof2019LASim(path_to_features="/data2/neil/ASVspoof2019LA/",
                                                 path_to_deviced="/dataNVME/neil/ASVspoof2019LADevice",
                                                 part="eval",
-                                                feature="LFCC", feat_len=args.feat_len)
-    testDataLoader = DataLoader(test_set, batch_size=args.batch_size, shuffle=False, num_workers=0)
+                                                feature=args.feat, feat_len=args.feat_len)
+    testDataLoader = DataLoader(test_set, batch_size=args.batch_size, shuffle=True, num_workers=0)
     model.eval()
     # score_loader, idx_loader = [], []
 
     with open(os.path.join(dir_path, 'checkpoint_cm_score_ASVspoof2019LASim.txt'), 'w') as cm_score_file:
         for i, (feat, audio_fn, tags, labels, _) in enumerate(tqdm(testDataLoader)):
             if i > int(len(test_set) / args.batch_size / (len(test_set.devices) + 1)): break
-            feat = feat.transpose(2,3).to(device)
+            if args.feat == "Raw":
+                feat = feat.to(args.device)
+            else:
+                feat = feat.transpose(2, 3).to(args.device)
             # print(feat.shape)
             tags = tags.to(device)
             labels = labels.to(device)
@@ -335,8 +338,10 @@ def test_on_ASVspoof2021LA(feat_model_path, loss_model_path, part, add_loss):
     with open(txt_file_name, 'w') as cm_score_file:
         for i, data_slice in enumerate(tqdm(testDataLoader)):
             feat, audio_fn = data_slice
-
-            feat = feat.transpose(2, 3).to(device)
+            if args.feat == "Raw":
+                feat = feat.to(args.device)
+            else:
+                feat = feat.transpose(2, 3).to(args.device)
 
             labels = torch.zeros((feat.shape[0]))
             labels = labels.to(device)
