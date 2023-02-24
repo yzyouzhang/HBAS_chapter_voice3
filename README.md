@@ -1,4 +1,4 @@
-# Generalizing Voice Presentation Attack Detection to Unseen Synthetic Attacks and Channel Variation
+# [Generalizing Voice Presentation Attack Detection to Unseen Synthetic Attacks and Channel Variation](https://link.springer.com/chapter/10.1007/978-981-19-5288-3_15)
 
 ## Abstract
 Automatic Speaker Verification (ASV) systems aim to verify a speaker’s claimed identity through voice. However, voice can be easily forged with replay, text-to-speech (TTS), and voice conversion (VC) techniques, which may compromise ASV systems. Voice presentation attack detection (PAD) is developed to improve the reliability of speaker verification systems against such spoofing attacks. 
@@ -45,3 +45,27 @@ python3 train.py -o /data3/neil/hbas/models1101/resnet -l ocsoftmax --gpu 0 -m r
 ```
 python3 test.py -t ASVspoof2021LA -m /data3/neil/hbas/models1101/resnet -l ocsoftmax --gpu 0
 ```
+
+### Citation
+```
+@Inbook{zhang2023generalizing,
+author="Zhang, You
+and Jiang, Fei
+and Zhu, Ge
+and Chen, Xinhui
+and Duan, Zhiyao",
+editor="Marcel, S{\'e}bastien
+and Fierrez, Julian
+and Evans, Nicholas",
+title="Generalizing Voice Presentation Attack Detection to Unseen Synthetic Attacks and Channel Variation",
+bookTitle="Handbook of Biometric Anti-Spoofing: Presentation Attack Detection and Vulnerability Assessment",
+year="2023",
+publisher="Springer Nature Singapore",
+address="Singapore",
+pages="421--443",
+isbn="978-981-19-5288-3",
+doi="10.1007/978-981-19-5288-3_15",
+url="https://doi.org/10.1007/978-981-19-5288-3_15"
+}
+```
+
